@@ -19,7 +19,7 @@ class TestDQNStore(unittest.TestCase):
             done=np.zeros((125000, 8), dtype=np.bool)
         )
         dump_name = "temp.pkl"
-        mem_size = sum([x.size + x.itemsize for x in dummy_buffer.values()])
+        mem_size = sum([x.size * x.itemsize for x in dummy_buffer.values()])
         max_chunk_size = int(4e9)  # 4 GB
         if mem_size > max_chunk_size:
             num_splits = (mem_size // max_chunk_size) + 1

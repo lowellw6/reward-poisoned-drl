@@ -63,7 +63,7 @@ class NStepReturnBufferStore(NStepReturnBuffer):
         """Need to chunk to circumvent Pickle bug with >4GB serializations."""
         self.save_idx += 1
         buffer_dict = self._get_samples_dict()
-        mem_size = sum([arr.size + arr.itemsize for arr in buffer_dict.values()])
+        mem_size = sum([arr.size * arr.itemsize for arr in buffer_dict.values()])
         if mem_size > MAX_CHUNK_SIZE:
             num_splits = (mem_size // MAX_CHUNK_SIZE) + 1
             chunks = {key: np.array_split(buffer_dict[key], num_splits, axis=0) for key in buffer_dict.keys()}
