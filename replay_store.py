@@ -13,6 +13,7 @@ from rlpyt.utils.collections import namedarraytuple
 from rlpyt.utils.logging import logger
 
 BufferSamples = None
+MAX_CHUNK_SIZE = int(4e9)  # just under 4 GB
 
 
 class NStepReturnBufferStore(NStepReturnBuffer):
@@ -59,10 +60,22 @@ class NStepReturnBufferStore(NStepReturnBuffer):
         return T, idxs
 
     def save_replay_buffer(self):
+        """Need to chunk to circumvent Pickle bug with >4GB serializations."""
         self.save_idx += 1
-        save_path = osp.join(self.save_dir, self._get_stamp())
-        with open(save_path, "xb") as save_file:
-            pickle.dump(self._get_samples_dict(), save_file)
+        buffer_dict = self._get_samples_dict()
+        mem_size = sum([arr.size + arr.itemsize for arr in buffer_dict.values()])
+        if mem_size > MAX_CHUNK_SIZE:
+            num_splits = (mem_size // MAX_CHUNK_SIZE) + 1
+            chunks = {key: np.array_split(buffer_dict[key], num_splits, axis=0) for key in buffer_dict.keys()}
+            for idx in range(num_splits):
+                chunk = {key: val[idx] for key, val in chunks.items()}
+                save_path = osp.join(self.save_dir, f"{self._get_stamp()}_C{idx}.pkl")
+                with open(save_path, "xb") as save_file:
+                    pickle.dump(chunk, save_file)
+        else:
+            save_path = osp.join(self.save_dir, f"{self._get_stamp()}.pkl")
+            with open(save_path, "xb") as save_file:
+                pickle.dump(self._get_samples_dict(), save_file)
 
     def _set_stamp_info(self):
         if self.size >= int(1e6):
@@ -75,11 +88,11 @@ class NStepReturnBufferStore(NStepReturnBuffer):
     def _get_stamp(self):
         cum_samples = self.size * self.save_idx
         if cum_samples % self.base == 0:
-            stamp = str(cum_samples // self.base) + f"{self.letter}.pkl"
+            stamp = str(cum_samples // self.base) + f"{self.letter}"
         elif (10 * cum_samples) % self.base == 0:
-            stamp = f"{cum_samples / self.base :.1f}{self.letter}.pkl"
+            stamp = f"{cum_samples / self.base :.1f}{self.letter}"
         else:
-            stamp = f"{cum_samples / self.base :.2f}{self.letter}.pkl"
+            stamp = f"{cum_samples / self.base :.2f}{self.letter}"
         return stamp
 
     def _get_samples_dict(self):
