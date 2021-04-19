@@ -63,16 +63,33 @@ class DataGenerator:
 
         print(f"Done loading --> {(self.frames.itemsize * self.frames.size) / 2**30 :.2f} GB")
 
-        self.replay_size = replay_size
-        self.B = B
-        self.H = H
-        self.W = W
+        self.data_shape = data_shape
         self.frame_stack = frame_stack
         self.device = torch.device(device) if device is not None else torch.device("cpu")
+
+    def _uniform_sample(self, batch_size):
+        """
+        Returns frame-stacks uniformly sampled over R, T, B dims.
+        WARNING: the replay buffer frames are stored consecutively
+            even on 'dones', meaning a true sample extraction should
+            insert all-zero frames for the first few stacks after each
+            done. We ignore this for simplicity, meaning occasionally
+            a frame-stack may include frames from two distinct episodes.
+            But this should not affect typical discrimination objectives
+            like in contrastive learning.
+        """
+        R, T, B = self.data_shape[:3]
+        num_t_stacks = T - self.frame_stack + 1
+        R_idxs = np.random.randint(low=0, high=R, size=batch_size)
+        T_idxs = np.random.randint(low=0, high=num_t_stacks, size=batch_size)
+        B_idxs = np.random.randint(low=0, high=B, size=batch_size)
+        return np.stack([self.frames[r, t:t + self.frame_stack, b]
+            for r, t, b in zip(R_idxs, T_idxs, B_idxs)], axis=0)  # adapted from rlpyt NStepFrameBuffer
 
 
 class ContrastiveDG(DataGenerator):
     pass
+
 
 
 
@@ -103,3 +120,45 @@ class ContrastiveDG(DataGenerator):
 #                         time_anchor=None, time_pos=None)
 
 #     return obses, actions, rewards, next_obses, not_dones, cpc_kwargs
+
+
+
+################################################
+### Dummy helper classes below (for testing) ###
+################################################
+
+class DummyDataGenerator(DataGenerator):
+
+    def __init__(self, dataset_dir, replay_size=int(1e6), B=8, H=104, W=80, frame_stack=4, device=None):
+        """Same as DataGenerator but loads dummy data for speed."""
+        if not osp.exists(dataset_dir):
+            raise ValueError(f"Invalid dataset_dir: {dataset_dir}")
+
+        R = get_num_subdirs(dataset_dir)
+        assert replay_size % B == 0
+        T = (replay_size // B) + (frame_stack - 1)
+        data_shape = (R, T, B, H, W)
+        
+        print(f"Preallocating dummy obs frames array --> shape {data_shape}")
+        #self.frames = np.random.randint(low=0, high=2**8, size=np.prod(data_shape), dtype=np.uint8).reshape(data_shape)
+        self.frames = np.zeros(data_shape, dtype=np.uint8)
+        print("Done preallocating\n")
+
+        print(f"Dummy walking obs data --> root {dataset_dir}")
+        for r_idx, sub_name in enumerate(natsorted(os.listdir(dataset_dir))):
+            sub_path = osp.join(dataset_dir, sub_name)
+            
+            if osp.isdir(sub_path):
+                t_idx = 0
+
+                for name in natsorted(os.listdir(sub_path)):
+                    file_path = osp.join(sub_path, name)
+                    print(f"{osp.relpath(file_path, start=dataset_dir)}")
+                    
+                    # Do nothing
+
+        print(f"Dummy loaded --> {(self.frames.itemsize * self.frames.size) / 2**30 :.2f} GB")
+
+        self.data_shape = data_shape
+        self.frame_stack = frame_stack
+        self.device = torch.device(device) if device is not None else torch.device("cpu")
