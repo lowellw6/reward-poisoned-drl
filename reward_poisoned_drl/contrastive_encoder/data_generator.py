@@ -10,40 +10,69 @@ import pickle
 from natsort import natsorted
 
 
-class ContrastDataGenerator:
-    """
-    Loads data into RAM on creation, and provides data augmentation
-    sampling for contrastive objective. Expects pickled data in
-    'dataset_dir' to be of the format provided by the replay-store
-    subproject. Further, that dataset directory should have the tree
-    structure <subdirectories>/<chunks> where the data in chunks should
-    add to have the same length in each subdirectory for stacking.
+def get_num_subdirs(dataset_dir):
+    """This determines the R size of the data array, for preallocation"""
+    return len(list(filter(lambda x: osp.isdir(osp.join(dataset_dir, x)), os.listdir(dataset_dir))))
 
-    Resulting loaded self.frames has shape (R, T, B, H, W) for replay idx,
-    time idx, env idx, height, and width, respectively.
-    """
-    def __init__(self, dataset_dir, device=None):
+
+class DataGenerator:
+
+    def __init__(self, dataset_dir, replay_size=int(1e6), B=8, H=104, W=80, frame_stack=4, device=None):
+        """
+        Loads data into RAM on creation. Expects pickled data in
+        'dataset_dir' to be of the format provided by the replay-store
+        subproject. Further, that dataset directory should have the tree
+        structure <subdirectories>/<chunks> where the data in chunks should
+        add to have the same length in each subdirectory for stacking.
+
+        Resulting loaded self.frames has shape (R, T, B, H, W) for replay idx,
+        time idx, env idx, height, and width, respectively.
+
+        Note the number of replays to include 'R' is dynamic, but for convenience
+        we assume a known replay size and number of workers for each loaded replay 
+        (e.g. 1M steps split among 8 envs). This simplifies fast preallocation immensly.
+        """
         if not osp.exists(dataset_dir):
             raise ValueError(f"Invalid dataset_dir: {dataset_dir}")
 
-        chunks = []
-        for sub_name in natsorted(os.listdir(dataset_dir)):
-            if osp.isdir(sub_name):
-                sub_chunks = []
-                subdir_path = osp.join(dataset_dir, sub_name)
-                
-                for name in natsorted(os.listdir(subdir_path)):
-                    file_path = osp.join(subdir_path, name)
+        R = get_num_subdirs(dataset_dir)
+        assert replay_size % B == 0
+        T = (replay_size // B) + (frame_stack - 1)
+        data_shape = (R, T, B, H, W)
+        
+        print(f"Preallocating obs frames array --> shape {data_shape}")
+        self.frames = np.zeros(data_shape, dtype=np.uint8)
+        print("Done preallocating\n")
+
+        print(f"Loading obs data --> root {dataset_dir}")
+        for r_idx, sub_name in enumerate(natsorted(os.listdir(dataset_dir))):
+            sub_path = osp.join(dataset_dir, sub_name)
+            
+            if osp.isdir(sub_path):
+                t_idx = 0
+
+                for name in natsorted(os.listdir(sub_path)):
+                    file_path = osp.join(sub_path, name)
+                    print(f"{osp.relpath(file_path, start=dataset_dir)}")
+                    
                     with open(file_path, "rb") as f:
                         chunk = pickle.load(f)
                         obs = chunk["observation"]
-                        sub_chunks.append(obs)
-                
-                chunks.append(np.concatenate(sub_chunks, axis=0))  # T, B, H, W
+                        self.frames[r_idx, t_idx:t_idx+len(obs), :, :, :] = obs
+                        t_idx += len(obs)
 
-        self.frames = np.stack(chunks, axis=0)  # R, T, B, H, W
-        
+        print(f"Done loading --> {(self.frames.itemsize * self.frames.size) / 2**30 :.2f} GB")
+
+        self.replay_size = replay_size
+        self.B = B
+        self.H = H
+        self.W = W
+        self.frame_stack = frame_stack
         self.device = torch.device(device) if device is not None else torch.device("cpu")
+
+
+class ContrastiveDG(DataGenerator):
+    pass
 
 
 
