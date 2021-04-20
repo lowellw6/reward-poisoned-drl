@@ -12,39 +12,26 @@ def tie_weights(src, trg):
     trg.bias = src.bias
 
 
-# for 84 x 84 inputs
-OUT_DIM = {2: 39, 4: 35, 6: 31}
-# for 64 x 64 inputs
-OUT_DIM_64 = {2: 29, 4: 25, 6: 21}
-
-
 class PixelEncoder(nn.Module):
-    """Convolutional encoder of pixels observations."""
-    def __init__(self, obs_shape, feature_dim, num_layers=2, num_filters=32,output_logits=False):
+    """
+    Convolutional encoder of pixels observations.
+    Hard-coded to match implementation details from 
+    CURL Appendix B wherever possible, except for
+    the output dim which is reduced here since
+    Pong is visually non-complex.
+    """
+    def __init__(self):
         super().__init__()
 
-        assert len(obs_shape) == 3
-        self.obs_shape = obs_shape
-        self.feature_dim = feature_dim
-        self.num_layers = num_layers
-
         self.convs = nn.ModuleList(
-            [nn.Conv2d(obs_shape[0], num_filters, 3, stride=2)]
+            [nn.Conv2d(4, 32, 5, stride=5),
+             nn.Conv2d(32, 64, 5, stride=5)]
         )
-        for i in range(num_layers - 1):
-            self.convs.append(nn.Conv2d(num_filters, num_filters, 3, stride=1))
 
-        out_dim = OUT_DIM_64[num_layers] if obs_shape[-1] == 64 else OUT_DIM[num_layers] 
-        self.fc = nn.Linear(num_filters * out_dim * out_dim, self.feature_dim)
-        self.ln = nn.LayerNorm(self.feature_dim)
+        self.fc = nn.Linear(384, 128)
+        self.ln = nn.LayerNorm(128)
 
         self.outputs = dict()
-        self.output_logits = output_logits
-
-    def reparameterize(self, mu, logstd):
-        std = torch.exp(logstd)
-        eps = torch.randn_like(std)
-        return mu + eps * std
 
     def forward_conv(self, obs):
         obs = obs / 255.
@@ -53,9 +40,8 @@ class PixelEncoder(nn.Module):
         conv = torch.relu(self.convs[0](obs))
         self.outputs['conv1'] = conv
 
-        for i in range(1, self.num_layers):
-            conv = torch.relu(self.convs[i](conv))
-            self.outputs['conv%s' % (i + 1)] = conv
+        conv = torch.relu(self.convs[1](conv))
+        self.outputs['conv2'] = conv
 
         h = conv.view(conv.size(0), -1)
         return h
@@ -72,11 +58,7 @@ class PixelEncoder(nn.Module):
         h_norm = self.ln(h_fc)
         self.outputs['ln'] = h_norm
 
-        if self.output_logits:
-            out = h_norm
-        else:
-            out = torch.tanh(h_norm)
-            self.outputs['tanh'] = out
+        out = h_norm
 
         return out
 
@@ -85,17 +67,3 @@ class PixelEncoder(nn.Module):
         # only tie conv layers
         for i in range(self.num_layers):
             tie_weights(src=source.convs[i], trg=self.convs[i])
-
-    def log(self, L, step, log_freq):
-        if step % log_freq != 0:
-            return
-
-        for k, v in self.outputs.items():
-            L.log_histogram('train_encoder/%s_hist' % k, v, step)
-            if len(v.shape) > 2:
-                L.log_image('train_encoder/%s_img' % k, v[0], step)
-
-        for i in range(self.num_layers):
-            L.log_param('train_encoder/conv%s' % (i + 1), self.convs[i], step)
-        L.log_param('train_encoder/fc', self.fc, step)
-        L.log_param('train_encoder/ln', self.ln, step)

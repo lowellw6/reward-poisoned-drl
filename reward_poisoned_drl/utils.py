@@ -9,6 +9,14 @@ import numpy as np
 from skimage.util.shape import view_as_windows
 import cv2
 
+# Pong pre-processes cropping hyperparam constants
+PONG_CROP = dict(
+    top=14,
+    bottom=6,
+    left=10
+)
+# no right crop
+
 
 def soft_update_params(net, target_net, tau):
     for param, target_param in zip(net.parameters(), target_net.parameters()):
@@ -50,6 +58,19 @@ def center_crop_image(image, output_size):
 
     image = image[:, top:top + new_h, left:left + new_w]
     return image
+
+
+def semantic_crop_pong(obs):
+    """
+    Removes adversary paddle and score in pong,
+    as we only care about the position of the agent
+    paddle and the puck for targeted attacks.
+    Image-stack shape: (?, 4, 104, 80) --> (?, 4, 84, 70)
+    """
+    H, W = obs.shape[2:]
+    assert (H, W) == (104, 80)
+    t, b, l = PONG_CROP["top"], PONG_CROP["bottom"], PONG_CROP["left"]
+    return obs[:, :, t:H-b, l:]
 
 
 def show_frame_stacks(batch, window_name):

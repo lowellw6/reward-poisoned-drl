@@ -9,7 +9,7 @@ import os.path as osp
 import pickle
 from natsort import natsorted
 
-from reward_poisoned_drl.utils import random_crop
+from reward_poisoned_drl.utils import random_crop, semantic_crop_pong, PONG_CROP
 
 
 def get_num_subdirs(dataset_dir):
@@ -133,18 +133,39 @@ class DataGenerator:
         
 
 class ContrastiveDG(DataGenerator):
+    """
+    Data generator which prepares batches for contrastive learning,
+    generating anchors, positives, and implicit negatives (non-positives)
+    via random cropping.
+
+    WARNING: This data-generator assumes we're learning Pong!
+        We hard-code the use of semantic_crop_pong in batch_prep.
+    """
 
     def __init__(self, dataset_dir, H_reduce=8, W_reduce=8, **kwargs):
-        """Adds reduction parameters which determine cropped image size."""
+        """
+        Adds reduction parameters which determine cropped image size.
+        Also modifies self.data_shape to account for Pong semantic crop
+        (which occurs before random cropping augmentation).
+        """
         super().__init__(dataset_dir, **kwargs)
         self.H_reduce = H_reduce
         self.W_reduce = W_reduce
+        
+        H, W = self.data_shape[3:]
+        H -= PONG_CROP["top"] + PONG_CROP["bottom"]
+        W -= PONG_CROP["left"]  # no right crop
+        self.data_shape = (*self.data_shape[:3], H, W)
 
     def batch_prep(self, batch):
         """
         Extracts anchors with positive targets via random cropping 
         over frame-stacks (cropped straight-through frame-stack dim).
         """
+        #!! crop out pong adversary paddle and top scores
+        batch = semantic_crop_pong(batch)
+        
+        # split into anchors and postivies for rest of processing
         anch = batch
         pos = batch.copy()
 
