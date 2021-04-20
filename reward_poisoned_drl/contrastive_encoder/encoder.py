@@ -16,9 +16,7 @@ class PixelEncoder(nn.Module):
     """
     Convolutional encoder of pixels observations.
     Hard-coded to match implementation details from 
-    CURL Appendix B wherever possible, except for
-    the output dim which is reduced here since
-    Pong is visually non-complex.
+    CURL Appendix A/B wherever possible.
     """
     def __init__(self):
         super().__init__()
@@ -28,8 +26,8 @@ class PixelEncoder(nn.Module):
              nn.Conv2d(32, 64, 5, stride=5)]
         )
 
-        self.fc = nn.Linear(384, 128)
-        self.ln = nn.LayerNorm(128)
+        self.fc = nn.Linear(384, 50)
+        self.ln = nn.LayerNorm(50)
 
         self.outputs = dict()
 

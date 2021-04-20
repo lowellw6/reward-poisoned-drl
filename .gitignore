@@ -1,4 +1,5 @@
 .vscode
 **/data
+**/runs
 **/__pycache__
 **.egg-info

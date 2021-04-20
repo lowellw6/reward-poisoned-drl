@@ -92,3 +92,8 @@ def show_frame_stacks(batch, window_name):
             cv2.imshow(window_name, image)
         cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+
+def basic_stats(items):
+    """Returns min, mean, max, and std of items."""
+    return np.min(items), np.mean(items), np.max(items), np.std(items)

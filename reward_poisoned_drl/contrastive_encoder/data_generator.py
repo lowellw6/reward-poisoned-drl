@@ -233,7 +233,12 @@ class DummyDataGenerator(DummyDataMixin, DataGenerator):
 
 class DummyContrastiveDG(DummyDataMixin, ContrastiveDG):
     
-    def __init__(self, dataset_dir, H_reduce=16, W_reduce=16, **kwargs):
+    def __init__(self, dataset_dir, H_reduce=8, W_reduce=8, **kwargs):
         super().__init__(dataset_dir, **kwargs)
         self.H_reduce = H_reduce
         self.W_reduce = W_reduce
+
+        H, W = self.data_shape[3:]
+        H -= PONG_CROP["top"] + PONG_CROP["bottom"]
+        W -= PONG_CROP["left"]  # no right crop
+        self.data_shape = (*self.data_shape[:3], H, W)

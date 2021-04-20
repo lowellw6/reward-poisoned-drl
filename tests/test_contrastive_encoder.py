@@ -5,10 +5,12 @@ import cv2
 import torch
 import pickle
 from tqdm import tqdm
+import copy
 
 from reward_poisoned_drl.contrastive_encoder.data_generator import ContrastiveDG, DummyContrastiveDG
-from reward_poisoned_drl.utils import show_frame_stacks, random_crop, semantic_crop_pong
+from reward_poisoned_drl.utils import soft_update_params, show_frame_stacks, random_crop, semantic_crop_pong
 from reward_poisoned_drl.contrastive_encoder.encoder import PixelEncoder
+from reward_poisoned_drl.contrastive_encoder.contrast import ContrastiveTrainer
 
 USE_DUMMY = False
 
@@ -20,13 +22,23 @@ def get_single_ob():
     return ob
 
 
+def get_single_input():
+    """Need a bit of prep for contrastive encoder models."""
+    ob = get_single_ob()
+    ob = np.expand_dims(ob.transpose(2, 0, 1), axis=0)  # H, W, C --> 1, C, H, W
+    ob = semantic_crop_pong(ob)
+    H, W = ob.shape[2:]
+    ob = ob[:, :, 4:H-4, 4:W-4]  # center crop with reduce = 8        
+    return torch.as_tensor(ob, dtype=torch.float32)
+
+
 # class TestContrastiveDG(unittest.TestCase):
 
 #     gen = None
 
 #     @classmethod
 #     def setUpClass(cls):
-#         dataset_dir = "/home/lowell/reward-poisoned-drl/data"
+#         dataset_dir = "/home/lowell/reward-poisoned-drl/data/train"
 #         GenCls = DummyContrastiveDG if USE_DUMMY else ContrastiveDG
 #         cls.gen = GenCls(dataset_dir)  # takes a while if not using dummy class
 
@@ -137,7 +149,73 @@ class TestPixelEncoder(unittest.TestCase):
         enc = PixelEncoder()
         out = enc(ob)
 
-        self.assertEqual(out.shape, (1, 128))
+        self.assertEqual(out.shape, (1, 50))
+
+
+class TestContrastiveTrainer(unittest.TestCase):
+
+    def setUp(self):
+        self.device = torch.device("cuda:0")
+        self.trainer = ContrastiveTrainer(self.device)
+
+    def test_compute_logits(self):
+        trainer = self.trainer
+        
+        anch = get_single_input().to(self.device)
+        pos = anch.clone()
+ 
+        z_a = trainer.query_enc(anch)
+        z_pos = trainer.key_enc(pos).detach()
+        logits = trainer.compute_logits(z_a, z_pos)
+
+        self.assertTrue(logits.item() == 0.)
+
+    def test_gradient_back_prop(self):
+        trainer = self.trainer
+
+        anch = get_single_input().to(self.device)
+        pos = anch.clone()
+ 
+        z_a = trainer.query_enc(anch)
+        z_pos = trainer.key_enc(pos).detach()
+
+        logits = trainer.compute_logits(z_a, z_pos)
+        labels = torch.arange(logits.shape[0]).long().to(self.device)
+        loss = trainer.cross_entropy_loss(logits, labels)
+
+        for param in trainer.query_enc.parameters():
+            self.assertIsNone(param.grad)
+
+        for param in trainer.key_enc.parameters():
+            self.assertIsNone(param.grad)
+
+        self.assertIsNone(trainer.W.grad)
+        
+        trainer.opt.zero_grad()
+        loss.backward()
+
+        for param in trainer.query_enc.parameters():
+            self.assertIsNotNone(param.grad)
+        
+        for param in trainer.key_enc.parameters():
+            self.assertIsNone(param.grad)  # is detached
+
+        self.assertIsNotNone(trainer.W.grad)
+
+    def test_momentum_target_update(self):
+        trainer = self.trainer
+
+        query_enc_params_before = copy.deepcopy(list(trainer.query_enc.parameters()))
+        key_enc_params_before = copy.deepcopy(list(trainer.key_enc.parameters()))
+        
+        soft_update_params(trainer.query_enc, trainer.key_enc, 0.5)  # large tau to exaggerate average
+
+        for p1, p2 in zip(trainer.query_enc.parameters(), query_enc_params_before):
+            self.assertTrue(torch.allclose(p1, p2))
+
+        for p1, p2 in zip(trainer.key_enc.parameters(), key_enc_params_before):
+            one_or_zeros = torch.prod(p1) == 0. or torch.prod(p1) == 1.
+            self.assertTrue(one_or_zeros or not torch.allclose(p1, p2))
 
 
 if __name__ == "__main__":
