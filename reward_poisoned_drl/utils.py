@@ -1,11 +1,13 @@
 """
 Shared project utilities.
-Partially adapted from: https://github.com/MishaLaskin/curl/blob/master/utils.py
+Adapted from: https://github.com/MishaLaskin/curl/blob/master/utils.py
 """
 
 
 import torch
 import numpy as np
+from skimage.util.shape import view_as_windows
+import cv2
 
 
 def soft_update_params(net, target_net, tau):
@@ -24,14 +26,16 @@ def random_crop(imgs, output_size):
     """
     # batch size
     n = imgs.shape[0]
-    img_size = imgs.shape[-1]
-    crop_max = img_size - output_size
+    H, W = imgs.shape[2:]
+    H_out, W_out = output_size
+    h_crop_max = H - H_out
+    w_crop_max = W - W_out
     imgs = np.transpose(imgs, (0, 2, 3, 1))
-    w1 = np.random.randint(0, crop_max, n)
-    h1 = np.random.randint(0, crop_max, n)
+    w1 = np.random.randint(0, w_crop_max, n)
+    h1 = np.random.randint(0, h_crop_max, n)
     # creates all sliding windows combinations of size (output_size)
     windows = view_as_windows(
-        imgs, (1, output_size, output_size, 1))[..., 0,:,:, 0]
+        imgs, (1, H_out, W_out, 1))[..., 0,:,:, 0]
     # selects a random window for each batch element
     cropped_imgs = windows[np.arange(n), w1, h1]
     return cropped_imgs
@@ -46,3 +50,24 @@ def center_crop_image(image, output_size):
 
     image = image[:, top:top + new_h, left:left + new_w]
     return image
+
+
+def show_frame_stacks(batch, window_name):
+    H, W = batch.shape[2:]
+    scale_factor = 6
+    for bs_idx in range(len(batch)):
+        for fs_idx in range(batch.shape[1]):
+            cv2.waitKey(500)
+            image = cv2.resize(batch[bs_idx, fs_idx, :, :], (scale_factor * W, scale_factor * H))
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+            image = cv2.putText(image, 
+                f"{bs_idx}-{fs_idx}", 
+                (5, scale_factor*H-5), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                1, 
+                (0, 0, 255),  # B, G, R 
+                1
+            )
+            cv2.imshow(window_name, image)
+        cv2.waitKey(0)
+    cv2.destroyAllWindows()
