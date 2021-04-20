@@ -134,7 +134,7 @@ class DataGenerator:
 
 class ContrastiveDG(DataGenerator):
 
-    def __init__(self, dataset_dir, H_reduce=16, W_reduce=16, **kwargs):
+    def __init__(self, dataset_dir, H_reduce=8, W_reduce=8, **kwargs):
         """Adds reduction parameters which determine cropped image size."""
         super().__init__(dataset_dir, **kwargs)
         self.H_reduce = H_reduce
