@@ -92,130 +92,130 @@ def get_single_input():
     #     show_frame_stacks(pos.to(torch.uint8).numpy(), f"Positives {pos.shape[2]}x{pos.shape[3]}")
 
 
-# class TestAugmentation(unittest.TestCase):
+class TestAugmentation(unittest.TestCase):
 
-    # def test_semantic_crop(self):
-    #     """Gets rid of adversary and paddle, which we are not concerned with."""
-    #     ob = get_single_ob()
-    #     ob = np.expand_dims(ob.transpose(2, 0, 1), axis=0)  # H, W, C --> 1, C, H, W
-    #     show_frame_stacks(ob, "Original")
-    #     ob = semantic_crop_pong(ob)
-    #     self.assertEqual(ob.shape, (1, 4, 84, 70))
-    #     show_frame_stacks(ob, "Semantic Crop")
+    def test_semantic_crop(self):
+        """Gets rid of adversary and paddle, which we are not concerned with."""
+        ob = get_single_ob()
+        ob = np.expand_dims(ob.transpose(2, 0, 1), axis=0)  # H, W, C --> 1, C, H, W
+        show_frame_stacks(ob, "Original")
+        ob = semantic_crop_pong(ob)
+        self.assertEqual(ob.shape, (1, 4, 84, 70))
+        show_frame_stacks(ob, "Semantic Crop")
     
-    # def test_random_cropping(self):
-    #     """Quickly load single frame stack for checking cropping regions."""
-    #     H_reduce = 8
-    #     W_reduce = 8
+    def test_random_cropping(self):
+        """Quickly load single frame stack for checking cropping regions."""
+        H_reduce = 8
+        W_reduce = 8
 
-    #     ob = get_single_ob()
-    #     ob = np.expand_dims(ob.transpose(2, 0, 1), axis=0)  # H, W, C --> 1, C, H, W
-    #     ob = semantic_crop_pong(ob)
-
-    #     # get crops in corners to show worst-case omissions
-    #     upper_left = ob[:, :, :-H_reduce, :-W_reduce]
-    #     upper_right = ob[:, :, :-H_reduce, W_reduce:]
-    #     bottom_right = ob[:, :, H_reduce:,  W_reduce:]
-    #     bottom_left = ob[:, :, H_reduce:, :-W_reduce]
-
-    #     show_frame_stacks(ob, "Original")
-    #     cat = np.concatenate((upper_left, upper_right, bottom_right, bottom_left), axis=0)
-    #     show_frame_stacks(cat, "Extreme Crops (Clockwise)")
-
-
-class TestPixelEncoder(unittest.TestCase):
-
-    ### UNNECESSARY - Just modifying PixelEncoder details slightly to match shape
-    # def test_resize(self):
-    #     ob = get_single_ob()
-    #     H, W = ob.shape[:2]
-    #     ob = ob[4:H-4, 4:W-4, :]  # center crop with reduce = 8
-    #     orig = ob.copy()
-    #     resized = cv2.resize(ob, (84, 84))  # to match CURL
-    #     show_frame_stacks(np.expand_dims(orig.transpose(2, 0, 1), axis=0), "Center Crop")
-    #     show_frame_stacks(np.expand_dims(resized.transpose(2, 0, 1), axis=0), "Resized Crop")
-    
-    def test_basics(self):
         ob = get_single_ob()
         ob = np.expand_dims(ob.transpose(2, 0, 1), axis=0)  # H, W, C --> 1, C, H, W
         ob = semantic_crop_pong(ob)
-        H, W = ob.shape[2:]
-        ob = ob[:, :, 4:H-4, 4:W-4]  # center crop with reduce = 8
+
+        # get crops in corners to show worst-case omissions
+        upper_left = ob[:, :, :-H_reduce, :-W_reduce]
+        upper_right = ob[:, :, :-H_reduce, W_reduce:]
+        bottom_right = ob[:, :, H_reduce:,  W_reduce:]
+        bottom_left = ob[:, :, H_reduce:, :-W_reduce]
+
+        show_frame_stacks(ob, "Original")
+        cat = np.concatenate((upper_left, upper_right, bottom_right, bottom_left), axis=0)
+        show_frame_stacks(cat, "Extreme Crops (Clockwise)")
+
+
+# class TestPixelEncoder(unittest.TestCase):
+
+#     ### UNNECESSARY - Just modifying PixelEncoder details slightly to match shape
+#     # def test_resize(self):
+#     #     ob = get_single_ob()
+#     #     H, W = ob.shape[:2]
+#     #     ob = ob[4:H-4, 4:W-4, :]  # center crop with reduce = 8
+#     #     orig = ob.copy()
+#     #     resized = cv2.resize(ob, (84, 84))  # to match CURL
+#     #     show_frame_stacks(np.expand_dims(orig.transpose(2, 0, 1), axis=0), "Center Crop")
+#     #     show_frame_stacks(np.expand_dims(resized.transpose(2, 0, 1), axis=0), "Resized Crop")
+    
+#     def test_basics(self):
+#         ob = get_single_ob()
+#         ob = np.expand_dims(ob.transpose(2, 0, 1), axis=0)  # H, W, C --> 1, C, H, W
+#         ob = semantic_crop_pong(ob)
+#         H, W = ob.shape[2:]
+#         ob = ob[:, :, 4:H-4, 4:W-4]  # center crop with reduce = 8
         
-        self.assertEqual(ob.shape, (1, 4, 76, 62))
+#         self.assertEqual(ob.shape, (1, 4, 76, 62))
         
-        ob = torch.as_tensor(ob, dtype=torch.float32)
+#         ob = torch.as_tensor(ob, dtype=torch.float32)
         
-        enc = PixelEncoder()
-        out = enc(ob)
+#         enc = PixelEncoder()
+#         out = enc(ob)
 
-        self.assertEqual(out.shape, (1, 50))
+#         self.assertEqual(out.shape, (1, 50))
 
 
-class TestContrastiveTrainer(unittest.TestCase):
+# class TestContrastiveTrainer(unittest.TestCase):
 
-    def setUp(self):
-        self.device = torch.device("cuda:0")
-        self.trainer = ContrastiveTrainer(self.device)
+#     def setUp(self):
+#         self.device = torch.device("cuda:0")
+#         self.trainer = ContrastiveTrainer(self.device)
 
-    def test_compute_logits(self):
-        trainer = self.trainer
+#     def test_compute_logits(self):
+#         trainer = self.trainer
         
-        anch = get_single_input().to(self.device)
-        pos = anch.clone()
+#         anch = get_single_input().to(self.device)
+#         pos = anch.clone()
  
-        z_a = trainer.query_enc(anch)
-        z_pos = trainer.key_enc(pos).detach()
-        logits = trainer.compute_logits(z_a, z_pos)
+#         z_a = trainer.query_enc(anch)
+#         z_pos = trainer.key_enc(pos).detach()
+#         logits = trainer.compute_logits(z_a, z_pos)
 
-        self.assertTrue(logits.item() == 0.)
+#         self.assertTrue(logits.item() == 0.)
 
-    def test_gradient_back_prop(self):
-        trainer = self.trainer
+#     def test_gradient_back_prop(self):
+#         trainer = self.trainer
 
-        anch = get_single_input().to(self.device)
-        pos = anch.clone()
+#         anch = get_single_input().to(self.device)
+#         pos = anch.clone()
  
-        z_a = trainer.query_enc(anch)
-        z_pos = trainer.key_enc(pos).detach()
+#         z_a = trainer.query_enc(anch)
+#         z_pos = trainer.key_enc(pos).detach()
 
-        logits = trainer.compute_logits(z_a, z_pos)
-        labels = torch.arange(logits.shape[0]).long().to(self.device)
-        loss = trainer.cross_entropy_loss(logits, labels)
+#         logits = trainer.compute_logits(z_a, z_pos)
+#         labels = torch.arange(logits.shape[0]).long().to(self.device)
+#         loss = trainer.cross_entropy_loss(logits, labels)
 
-        for param in trainer.query_enc.parameters():
-            self.assertIsNone(param.grad)
+#         for param in trainer.query_enc.parameters():
+#             self.assertIsNone(param.grad)
 
-        for param in trainer.key_enc.parameters():
-            self.assertIsNone(param.grad)
+#         for param in trainer.key_enc.parameters():
+#             self.assertIsNone(param.grad)
 
-        self.assertIsNone(trainer.W.grad)
+#         self.assertIsNone(trainer.W.grad)
         
-        trainer.opt.zero_grad()
-        loss.backward()
+#         trainer.opt.zero_grad()
+#         loss.backward()
 
-        for param in trainer.query_enc.parameters():
-            self.assertIsNotNone(param.grad)
+#         for param in trainer.query_enc.parameters():
+#             self.assertIsNotNone(param.grad)
         
-        for param in trainer.key_enc.parameters():
-            self.assertIsNone(param.grad)  # is detached
+#         for param in trainer.key_enc.parameters():
+#             self.assertIsNone(param.grad)  # is detached
 
-        self.assertIsNotNone(trainer.W.grad)
+#         self.assertIsNotNone(trainer.W.grad)
 
-    def test_momentum_target_update(self):
-        trainer = self.trainer
+#     def test_momentum_target_update(self):
+#         trainer = self.trainer
 
-        query_enc_params_before = copy.deepcopy(list(trainer.query_enc.parameters()))
-        key_enc_params_before = copy.deepcopy(list(trainer.key_enc.parameters()))
+#         query_enc_params_before = copy.deepcopy(list(trainer.query_enc.parameters()))
+#         key_enc_params_before = copy.deepcopy(list(trainer.key_enc.parameters()))
         
-        soft_update_params(trainer.query_enc, trainer.key_enc, 0.5)  # large tau to exaggerate average
+#         soft_update_params(trainer.query_enc, trainer.key_enc, 0.5)  # large tau to exaggerate average
 
-        for p1, p2 in zip(trainer.query_enc.parameters(), query_enc_params_before):
-            self.assertTrue(torch.allclose(p1, p2))
+#         for p1, p2 in zip(trainer.query_enc.parameters(), query_enc_params_before):
+#             self.assertTrue(torch.allclose(p1, p2))
 
-        for p1, p2 in zip(trainer.key_enc.parameters(), key_enc_params_before):
-            one_or_zeros = torch.prod(p1) == 0. or torch.prod(p1) == 1.
-            self.assertTrue(one_or_zeros or not torch.allclose(p1, p2))
+#         for p1, p2 in zip(trainer.key_enc.parameters(), key_enc_params_before):
+#             one_or_zeros = torch.prod(p1) == 0. or torch.prod(p1) == 1.
+#             self.assertTrue(one_or_zeros or not torch.allclose(p1, p2))
 
 
 if __name__ == "__main__":

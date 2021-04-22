@@ -16,13 +16,11 @@ class ContrastiveTrainer:
         device,
         encoder_lr=1e-3,
         encoder_tau=0.001,
-        key_encoder_update_freq=2,
-        log_interval=100
+        key_encoder_update_freq=2
     ):
         self.device = device
         self.encoder_tau = encoder_tau
         self.key_encoder_update_freq = key_encoder_update_freq
-        self.log_interval = log_interval
 
         self.query_enc = PixelEncoder().to(device)
         self.key_enc = PixelEncoder().to(device)
@@ -100,3 +98,38 @@ class ContrastiveTrainer:
         labels = torch.arange(logits.shape[0]).long().to(self.device)
         
         return self.cross_entropy_loss(logits, labels).item()
+
+
+class Contrastor:
+    """Directly get similarity logits with trained model."""
+    
+    def __init__(self, state_dict, device):
+        self.device = device
+
+        self.query_enc = PixelEncoder().to(device)
+        self.key_enc = PixelEncoder().to(device)
+        self.W = torch.rand((50, 50), device=device)
+
+        self._load_state_dict(state_dict)
+
+    def _load_state_dict(self, state_dict):
+        self.W.data = state_dict["bilinear.weight"].data
+        self.query_enc.load_state_dict(state_dict["query_enc"])
+        self.key_enc.load_state_dict(state_dict["key_enc"])
+
+    def __call__(self, queries, keys):
+        """
+        Returns (M, N) shape logit similarity matrix,
+        where row (dim 0) corresponds to the query
+        and column (dim 1) corresponds to the key.
+
+        Queries shape --> (M, z)
+        Keys shape --> (N, z)
+        M and N are batch dims, and z is the latent dim.
+        """
+        z_q = self.query_enc(queries)
+        z_k = self.key_enc(keys)
+        
+        Wz = torch.matmul(self.W, z_k.T)  # (z, N)
+        logits = torch.matmul(z_q, Wz)  # (M, N)
+        return logits - torch.max(logits, 1)[0][:, None]  # subtract max for stability

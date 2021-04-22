@@ -73,12 +73,12 @@ def semantic_crop_pong(obs):
     return obs[:, :, t:H-b, l:]
 
 
-def show_frame_stacks(batch, window_name):
+def show_frame_stacks(batch, window_name, wait_time=500):
     H, W = batch.shape[2:]
     scale_factor = 6
     for bs_idx in range(len(batch)):
         for fs_idx in range(batch.shape[1]):
-            cv2.waitKey(500)
+            cv2.waitKey(wait_time)
             image = cv2.resize(batch[bs_idx, fs_idx, :, :], (scale_factor * W, scale_factor * H))
             image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
             image = cv2.putText(image, 
