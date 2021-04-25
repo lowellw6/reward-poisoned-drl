@@ -74,6 +74,12 @@ def semantic_crop_pong(obs):
 
 
 def show_frame_stacks(batch, window_name, wait_time=500):
+    """
+    Shows batches of (grayscale) frames with label 
+    <batch index>-<frame index> on bottom left. Expects 
+    batch to have shape (T, C, H, W) for time, channels, 
+    height, and width, respectively.
+    """
     H, W = batch.shape[2:]
     scale_factor = 6
     for bs_idx in range(len(batch)):
@@ -91,6 +97,101 @@ def show_frame_stacks(batch, window_name, wait_time=500):
             )
             cv2.imshow(window_name, image)
         cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+def show_frame_stacks_with_scores(batch, scores, window_name, wait_time=500):
+    """
+    Same as 'show_frame_stacks' but labels the bottom right with
+    a floating point score. Intended for qualitative validation
+    of target-observation-similarity metrics.
+    """
+    assert len(batch) == len(scores)
+    H, W = batch.shape[2:]
+    scale_factor = 6
+    for bs_idx, score in enumerate(scores):
+        score = score.item()
+        for fs_idx in range(batch.shape[1]):
+            cv2.waitKey(wait_time)
+            image = cv2.resize(batch[bs_idx, fs_idx, :, :], (scale_factor * W, scale_factor * H))
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+            image = cv2.putText(image, 
+                f"{bs_idx}-{fs_idx}", 
+                (5, scale_factor*H-5), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                1, 
+                (0, 0, 255),  # B, G, R 
+                1
+            )
+            image = cv2.putText(image,
+                f"{score:.2f}",
+                (scale_factor*W-100, scale_factor*H-5), 
+                cv2.FONT_HERSHEY_SIMPLEX, 
+                1, 
+                (0, 0, 255),  # B, G, R 
+                1
+            )
+            cv2.imshow(window_name, image)
+        cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+def show_frame_feed(feed, window_name, wait_time=40, idx_offset=0):
+    """
+    Shows continuous feed of (grayscale) frames like 
+    a video, labeling the frame index on the bottom left.
+    Expects feed to have shape (T, H, W) for time, height,
+    and width, respectively.
+    """
+    H, W = feed.shape[1:]
+    scale_factor = 6
+    for idx, frame in enumerate(feed):
+        cv2.waitKey(wait_time)
+        image = cv2.resize(frame, (scale_factor * W, scale_factor * H))
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        image = cv2.putText(image, 
+            f"{idx + idx_offset}", 
+            (5, scale_factor*H-5), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            1, 
+            (0, 0, 255),  # B, G, R 
+            1
+        )
+        cv2.imshow(window_name, image)
+    cv2.destroyAllWindows()
+
+
+def show_frame_feed_with_scores(feed, scores, window_name, wait_time=40, idx_offset=0):
+    """
+    Same as 'show_frame_feed' but labels the bottom right with
+    a floating point score. Intended for qualitative validation
+    of target-observation-similarity metrics.
+    """
+    assert len(feed) == len(scores)
+    H, W = feed.shape[1:]
+    scale_factor = 6
+    for idx, (frame, score) in enumerate(zip(feed, scores)):
+        score = score.item()
+        cv2.waitKey(wait_time)
+        image = cv2.resize(frame, (scale_factor * W, scale_factor * H))
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        image = cv2.putText(image, 
+            f"{idx + idx_offset}", 
+            (5, scale_factor*H-5), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            1, 
+            (0, 0, 255),  # B, G, R 
+            1
+        )
+        image = cv2.putText(image,
+            f"{score:.2f}",
+            (scale_factor*W-100, scale_factor*H-5), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            1, 
+            (0, 0, 255),  # B, G, R 
+            1
+        )
+        cv2.imshow(window_name, image)
     cv2.destroyAllWindows()
 
 
