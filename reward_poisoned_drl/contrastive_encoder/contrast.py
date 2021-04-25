@@ -132,4 +132,4 @@ class Contrastor:
         
         Wz = torch.matmul(self.W, z_k.T)  # (z, N)
         logits = torch.matmul(z_q, Wz)  # (M, N)
-        return logits - torch.max(logits, 1)[0][:, None]  # subtract max for stability
+        return logits  # do NOT subtract max, we don't want batch norm
