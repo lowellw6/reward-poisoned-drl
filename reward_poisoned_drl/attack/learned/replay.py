@@ -4,7 +4,7 @@ which is itself an infinite-horizon off-policy
 algorithm. The attacker replay contains the
 following:
 
-Observation --> eta = (s_t, a_t, r_t, s_{t+1})
+Observation --> xi = (s_t, a_t, r_t, s_{t+1})
     One agent transition
 
 Action --> delta
