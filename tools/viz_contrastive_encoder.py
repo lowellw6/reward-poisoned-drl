@@ -11,9 +11,9 @@ from reward_poisoned_drl.utils import (semantic_crop_pong, show_frame_stacks_wit
 
 FRAME_STACK = 4
 MODEL_PREFIX = "/home/lowell/reward-poisoned-drl/runs/contrast_enc_4_20"
-MODEL_FILE = "contrast_enc_30.pt"
+MODEL_FILE = "contrast_enc_50.pt"
 DATA_PREFIX = "/home/lowell/reward-poisoned-drl/data"
-TARG_OB_FILE = "single_ob.pkl"
+TARG_OB_FILE = "targets/targ_mid.pkl"
 CONT_OB_FILE = "ep_stack.pkl"
 
 

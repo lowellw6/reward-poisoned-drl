@@ -3,13 +3,13 @@ import pickle
 import numpy as np
 import os.path as osp
 
-PREFIX = "/home/lowell/reward-poisoned-drl/data/train"
+PREFIX = "/home/lowell/reward-poisoned-drl/data"
 
-DATA_FILE = "1M/1M_C0.pkl"
-DUMP_FILE = "single_ob.pkl"
+DATA_FILE = "train/50M/50M_C0.pkl"
+DUMP_FILE = "targets/targ_mid.pkl"
 
-t = 472  # oldest frame
-b = 2
+t = 1567  # oldest frame
+b = 0
 fs = 4
 
 
