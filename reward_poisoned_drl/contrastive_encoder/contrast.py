@@ -44,7 +44,7 @@ class ContrastiveTrainer:
 
     def state_dict(self):
         return {
-            "bilinear.weight": self.W, 
+            "bilinear.weight": self.W,
             "query_enc": self.query_enc.state_dict(),
             "key_enc": self.key_enc.state_dict()
         }
@@ -69,16 +69,16 @@ class ContrastiveTrainer:
 
     def update(self, obs_anchor, obs_pos, step):
         """
-        Take one gradient step for query encoder and 
+        Take one gradient step for query encoder and
         momentum update for key encoder.
         """
         z_a = self.query_enc(obs_anchor)
         z_pos = self.key_enc(obs_pos).detach()  # detach pos encodings
-        
+
         logits = self.compute_logits(z_a, z_pos)
         labels = torch.arange(logits.shape[0]).long().to(self.device)
         loss = self.cross_entropy_loss(logits, labels)
-        
+
         self.opt.zero_grad()
         loss.backward()
         self.opt.step()
@@ -93,30 +93,29 @@ class ContrastiveTrainer:
         """Get loss without updating."""
         z_a = self.query_enc(obs_anchor)
         z_pos = self.key_enc(obs_pos)
-        
+
         logits = self.compute_logits(z_a, z_pos)
         labels = torch.arange(logits.shape[0]).long().to(self.device)
-        
+
         return self.cross_entropy_loss(logits, labels).item()
 
 
 class Contrastor:
     """Directly get similarity logits with trained model."""
-    
+
     def __init__(self, state_dict, device):
         self.device = device
 
         self.query_enc = PixelEncoder().to(device)
         self.key_enc = PixelEncoder().to(device)
         self.W = torch.rand((50, 50), device=device)
-
         self._load_state_dict(state_dict)
 
     def _load_state_dict(self, state_dict):
         self.W.data = state_dict["bilinear.weight"].data
         self.query_enc.load_state_dict(state_dict["query_enc"])
         self.key_enc.load_state_dict(state_dict["key_enc"])
-
+    # @torch.no_grad()
     def __call__(self, queries, keys):
         """
         Returns (M, N) shape logit similarity matrix,
@@ -129,7 +128,7 @@ class Contrastor:
         """
         z_q = self.query_enc(queries)
         z_k = self.key_enc(keys)
-        
+
         Wz = torch.matmul(self.W, z_k.T)  # (z, N)
         logits = torch.matmul(z_q, Wz)  # (M, N)
         return logits  # do NOT subtract max, we don't want batch norm

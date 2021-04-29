@@ -3,7 +3,7 @@ Runs a fixed reward-poisoning attack on a deep RL DQN agent.
 "Fixed" here means the adversary does not modify any of its
 internal state throughout agent training.
 
-The attacker aims to make the agent learn a target policy, 
+The attacker aims to make the agent learn a target policy,
 generating reward perturbations using Algorithm 2 in this paper:
 https://arxiv.org/pdf/2003.12613.pdf
 
@@ -23,20 +23,29 @@ from rlpyt.envs.atari.atari_env import AtariEnv, AtariTrajInfo
 from rlpyt.agents.dqn.atari.atari_dqn_agent import AtariDqnAgent
 from rlpyt.runners.minibatch_rl import MinibatchRl
 from rlpyt.utils.logging.context import logger_context
+# from reward_poisoned_drl.attack.fixed import soft_update_params
 
 from reward_poisoned_drl.attack.fixed.adversary import FixedAttackerDQN
+import pickle
+import torch
+
+
+STATE_DICT_PATH = "/home/rajesh/RL DP/RP-DRL Models/contrast_enc_30.pt"
+DQN_ORACLE_PATH = "/home/rajesh/RL DP/RP-DRL Models/dqn_oracle.pkl"
+target_bottom_path  = "/home/rajesh/RL DP/Targets/contrastive_targets/targ_bottom.pkl"
+target_mid_path = "/home/rajesh/RL DP/Targets/contrastive_targets/targ_mid.pkl"
 
 
 def build_and_train(run_ID=0, cuda_idx=None, n_parallel=2, serial_sampling=False):
     affinity = dict(cuda_idx=cuda_idx, workers_cpus=list(range(n_parallel)))
-    device = "CPU" if cuda_idx is None else f"GPU {cuda_idx}"
+    device = "cpu" if cuda_idx is None else f"gpu {cuda_idx}"
     if serial_sampling:
         Sampler = SerialSampler  # ignores workers_cpus
         print(f"Using serial sampler w/ {device} for action sampling and optimization")
     else:
         Sampler = CpuSampler if cuda_idx is None else GpuSampler
         print(f"Using parallel sampler w/ {device} for action sampling and optimization")
-    
+
     game = "pong"
 
     sampler = Sampler(
@@ -49,8 +58,25 @@ def build_and_train(run_ID=0, cuda_idx=None, n_parallel=2, serial_sampling=False
         max_decorrelation_steps=0
     )
 
+    delta_bound = 0.5
+    gamma = 0.99 # Discount factor
+    state_dict_contrastive = torch.load(STATE_DICT_PATH, map_location=torch.device(device)) # Contrastive encoder state dict
+    keys = []
+    temp_file = open(target_bottom_path, "rb") # Pickle files correspondong to target states
+    keys.append(pickle.load(temp_file))
+    temp_file = open(target_mid_path, "rb")
+    keys.append(pickle.load(temp_file)) # list of target states
+    runner_state_dict = torch.load(DQN_ORACLE_PATH, map_location=torch.device(device))
+    dqn_state_dict = runner_state_dict["agent_state_dict"]["model"] # Oracle DQN state dict loaded
+
     algo = FixedAttackerDQN(
-        min_steps_learn=1e3
+        delta_bound,
+        gamma,
+        device,
+        state_dict_contrastive,
+        keys,
+        dqn_state_dict,
+        min_steps_learn=1e3,
     )
 
     agent = AtariDqnAgent()
