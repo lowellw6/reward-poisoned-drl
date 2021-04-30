@@ -25,10 +25,10 @@ from rlpyt.samplers.parallel.cpu.sampler import CpuSampler
 from rlpyt.samplers.parallel.gpu.sampler import GpuSampler
 from rlpyt.envs.atari.atari_env import AtariEnv, AtariTrajInfo
 from rlpyt.agents.dqn.atari.atari_dqn_agent import AtariDqnAgent
-from rlpyt.runners.minibatch_rl import MinibatchRl
 from rlpyt.utils.logging.context import logger_context
 
 from reward_poisoned_drl.attack.fixed.adversary import FixedAttackerDQN
+from reward_poisoned_drl.attack.fixed.runner import MinibatchRlLogNotify
 from reward_poisoned_drl.utils import PONG_ACT_MAP
 
 
@@ -84,13 +84,14 @@ def build_and_train(run_ID=0, cuda_idx=None, n_parallel=2, serial_sampling=False
         contrast_sd_path,
         dqn_oracle_sd_path,
         delta_bound=1.0,
-        first_poison_itr=1,
+        min_steps_poison=0,
+        target_recall_window=1000,
         min_steps_learn=1e3
     )
 
     agent = AtariDqnAgent()
 
-    runner = MinibatchRl(
+    runner = MinibatchRlLogNotify(  # custom runner to notify attacker when logging
         algo=algo,
         agent=agent,
         sampler=sampler,

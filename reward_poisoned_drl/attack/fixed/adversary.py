@@ -9,6 +9,11 @@ This attacker's algorthm is adapted from the
 tabular version seen in Algorithm 2 of
 Zhang et al.'s "Adaptive Reward-Poisoning
 Attacks against Reinforcement Learning."
+
+This implementation only works with the
+following spaces:
+    observation --> Atari Pong images
+    action --> discrete
 """
 
 import os
@@ -16,8 +21,9 @@ import torch
 import pickle
 import numpy as np
 import copy
+from collections import namedtuple, deque
 
-from rlpyt.algos.dqn.dqn import DQN, SamplesToBuffer
+from rlpyt.algos.dqn.dqn import DQN, SamplesToBuffer, OptInfo
 from rlpyt.models.dqn.atari_dqn_model import AtariDqnModel
 
 from reward_poisoned_drl.contrastive_encoder.contrast import Contrastor
@@ -33,7 +39,8 @@ class FixedAttackerMixin:
             contrast_sd_path, 
             dqn_oracle_sd_path, 
             delta_bound=1.0, 
-            first_poison_itr=1, 
+            min_steps_poison=0,
+            target_recall_window=1000, 
             **kwargs
             ):
         """
@@ -41,20 +48,27 @@ class FixedAttackerMixin:
         contrast_sd_path: path to contrastive encoder state dictionary of pre-trained parameters
         dqn_oracle_sd_path: path to oracle DQN model state dictionary of pre-trained parameters (what agent wants to learn)
         delta_bound: scales magnitude of fixed perturbation (i.e. attacker "power")
-        first_poison_itr: what optimization iteration to start poioning rewards (must be >= 1)
+        min_steps_poison: how many sampler steps to collect normally until starting to poison rewards
+        target_recall_window: # of most recent target obs to include in recall calculation, per target ob
         """
         super().__init__(**kwargs)
         self.target_obs = torch.as_tensor(target_obs)
+        self.num_targets = len(target_obs)
         self.target_info = target_info
         self.contrast_sd_path = contrast_sd_path
         self.dqn_oracle_sd_path = dqn_oracle_sd_path
         self.delta_bound = delta_bound
-        
-        assert first_poison_itr >= 1  # can't poison zeroth iteration, need last_samples
-        self.first_poison_itr = first_poison_itr
+        self.min_steps_poison = min_steps_poison        
 
         self.opt_itr = None  # for storing current itr to know when to start poisoning
         self.last_samples = None  # for online poisoning with access to next state
+
+        # for storing target recall attacker metric
+        self.upcoming_log = False
+        self.target_recall = [deque(maxlen=target_recall_window) for _ in range(self.num_targets)]
+        self.AdvsOptInfo = namedtuple("AdvsOptInfo", [f"recallTarget{i}" for i in range(self.num_targets)])
+        self.CombinedInfo = namedtuple("CombinedInfo", OptInfo._fields + self.AdvsOptInfo._fields)
+        self.opt_info_fields = tuple(f for f in self.CombinedInfo._fields)
 
     def initialize(self, agent, n_itr, batch_spec, mid_batch_reset, examples, world_size=1, rank=0):
         super().initialize(agent, n_itr, batch_spec, mid_batch_reset, examples, world_size=world_size, rank=rank)
@@ -64,6 +78,11 @@ class FixedAttackerMixin:
 
         if batch_spec.T > 1:
             raise NotImplementedError("Expecting sampler to generate a single step per env per sampling iteration")
+
+        float_first_poison_itr = self.min_steps_poison / (batch_spec.T * batch_spec.B)
+        first_poison_itr = int(float_first_poison_itr) if float_first_poison_itr.is_integer() else int(float_first_poison_itr) + 1
+        first_poison_itr = max(first_poison_itr, 1) # can't poison zeroth iteration, need last_samples
+        self.first_poison_itr = first_poison_itr
         
         contrast_sd = torch.load(self.contrast_sd_path, map_location=self.device)
         self.contrastive_model = Contrastor(contrast_sd, self.device)
@@ -77,9 +96,17 @@ class FixedAttackerMixin:
             dqn_oracle_sd = dqn_oracle_sd["agent_state_dict"]["model"]
         self.dqn_oracle.load_state_dict(dqn_oracle_sd)
 
+    def log_notify(self, flag: bool):
+        """
+        If True, tells attacker to prepare for logging this iteration.
+        Should be called by Runner.
+        """
+        self.upcoming_log = flag
+
     def optimize_agent(self, itr, samples=None, sampler_itr=None):
         self.opt_itr = itr if sampler_itr is None else sampler_itr  # Async uses sampler_itr.
-        return super().optimize_agent(itr, samples=samples, sampler_itr=sampler_itr)
+        agent_opt_info = super().optimize_agent(itr, samples=samples, sampler_itr=sampler_itr)
+        return self._add_attacker_metrics(agent_opt_info, samples)
 
     def samples_to_buffer(self, samples):
         """
@@ -146,7 +173,7 @@ class FixedAttackerMixin:
         obs = obs.to(self.device)
         return self.dqn_oracle(obs, None, None).cpu()
 
-    def _find_targets(self, obs):
+    def _find_targets(self, obs, target_obs, target_info):
         """
         Use contrastive encoder to determine
         which observations are targets.
@@ -166,15 +193,15 @@ class FixedAttackerMixin:
         obs = obs.to(self.device)
 
         queries = self._center_crop_4px(semantic_crop_pong(obs))  # (B, ...)
-        keys = self._center_crop_4px(semantic_crop_pong(self.target_obs))  # (num_targets, ...)
+        keys = self._center_crop_4px(semantic_crop_pong(target_obs))  # (num_targets, ...)
         scores = self.contrastive_model(queries, keys).detach().cpu().numpy()
 
         is_target = np.zeros(len(scores), dtype=np.bool)
         targ_action = np.zeros(len(scores), dtype=self.action_type_np)
         best_score = np.full((len(scores),), -float(2 ** 100))
 
-        for tidx in range(len(self.target_obs)): 
-            thresh, targ_act = self.target_info[tidx]
+        for tidx in range(len(target_obs)): 
+            thresh, targ_act = target_info[tidx]
             is_this_target = scores[:, tidx] >= thresh
             is_better_target = np.logical_and(is_this_target, scores[:, tidx] > best_score)
             
@@ -199,7 +226,7 @@ class FixedAttackerMixin:
         attacker_q_values = self._get_oracle_q(obs)  # (B, |A|)
         
         # find which obs are target matches and get their respective target actions
-        is_target, targ_action = self._find_targets(obs)
+        is_target, targ_action = self._find_targets(obs, self.target_obs, self.target_info)
 
         # find target-action and not-target-action indices for target observations
         num_obs, num_act = attacker_q_values.shape  # (B, |A|)
@@ -238,6 +265,90 @@ class FixedAttackerMixin:
 
         return poisoned_rewards
 
+    def _update_target_recall(self, samples):
+        obs = samples.env.observation.squeeze()
+        act = samples.agent.action.squeeze()
+
+        for tidx in range(self.num_targets):
+            targ_ob = self.target_obs[tidx].unsqueeze(0)
+            targ_info = {0: self.target_info[tidx]}
+            is_target, targ_action = self._find_targets(obs, targ_ob, targ_info)
+            target_hit = act[is_target] == targ_action[is_target]
+            target_hit_list = target_hit.to(torch.float).tolist()
+            self.target_recall[tidx].extend(target_hit_list)
+
+    def _get_target_recall(self):
+        """
+        If not logging this iteration, just provide empty
+        lists so that we only provide the rolling deque
+        to the logger once.
+        """
+        if self.upcoming_log:
+            recall_provided = [list(recall_deque) for recall_deque in self.target_recall]
+        else:
+            recall_provided = [[] for _ in range(self.num_targets)]
+
+        return recall_provided
+
+    def _add_attacker_metrics(self, agent_opt_info, samples):
+        """
+        Adds attack metrics to the agent's optimization info.
+
+        Here we add recall of obs/action pairs
+        for each target over a rolling window.
+
+        This reflects how often we are attaining each
+        target action for each time we reach the
+        corresponding target observation.
+        """
+        self._update_target_recall(samples)
+
+        attacker_opt_info = self.AdvsOptInfo(*self._get_target_recall())
+        return self.CombinedInfo(*(agent_opt_info + attacker_opt_info))
+
 
 class FixedAttackerDQN(FixedAttackerMixin, DQN):
-    pass
+    """Adds any functionality specific to a DQN agent."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        """Overwrite AdvsOptInfo to add attackerCost."""
+        self.AdvsOptInfo = namedtuple("AdvsOptInfo", ["attackerCost"] + [f"recallTarget{i}" for i in range(self.num_targets)])
+        self.CombinedInfo = namedtuple("CombinedInfo", OptInfo._fields + self.AdvsOptInfo._fields)
+        self.opt_info_fields = tuple(f for f in self.CombinedInfo._fields)
+
+        # for storing dummy tensors which DQN does not use but its API requires
+        self.prev_action_dummy = None
+        self.prev_reward_dummy = None
+
+    def _get_attacker_cost(self):
+        target_q = self.agent(self.target_obs, self.prev_action_dummy, self.prev_reward_dummy)
+
+        attacker_cost = 0.
+        for tidx in range(self.num_targets):
+            targ_q_tidx = target_q[tidx, :]
+            _, targ_act = self.target_info[tidx]
+            not_targ_act_q = torch.cat((targ_q_tidx[:targ_act], targ_q_tidx[targ_act + 1:]))
+            targ_act_q = targ_q_tidx[targ_act]
+            
+            targ_cost = torch.relu(torch.max(not_targ_act_q) - targ_act_q + 0.01)  # using eta margin 0.01 
+            attacker_cost += targ_cost.item()
+        
+        return attacker_cost
+    
+    def _add_attacker_metrics(self, agent_opt_info, samples):
+        """
+        Here we add attacker cost, which is an instantaneous 
+        metric for how "close" we are to the target policy.
+
+        This depends directly on the agent's DQN model.
+        """
+        if self.prev_action_dummy is None:
+            self.prev_action_dummy = torch.zeros_like(samples.agent.action)
+            self.prev_reward_dummy = torch.zeros_like(samples.env.reward)
+
+        self._update_target_recall(samples)
+        attacker_cost = self._get_attacker_cost()
+
+        attacker_opt_info = self.AdvsOptInfo(*([attacker_cost] + self._get_target_recall()))
+        return self.CombinedInfo(*(agent_opt_info + attacker_opt_info))
