@@ -16,6 +16,10 @@ This adversary assumes an "oracle" Q-value function,
 which we approximate using a pre-trained DQN.
 """
 
+import pickle
+import torch
+import numpy as np
+
 from rlpyt.samplers.serial.sampler import SerialSampler
 from rlpyt.samplers.parallel.cpu.sampler import CpuSampler
 from rlpyt.samplers.parallel.gpu.sampler import GpuSampler
@@ -23,17 +27,22 @@ from rlpyt.envs.atari.atari_env import AtariEnv, AtariTrajInfo
 from rlpyt.agents.dqn.atari.atari_dqn_agent import AtariDqnAgent
 from rlpyt.runners.minibatch_rl import MinibatchRl
 from rlpyt.utils.logging.context import logger_context
-# from reward_poisoned_drl.attack.fixed import soft_update_params
 
 from reward_poisoned_drl.attack.fixed.adversary import FixedAttackerDQN
-import pickle
-import torch
+from reward_poisoned_drl.utils import PONG_ACT_MAP
 
 
-STATE_DICT_PATH = "/home/rajesh/RL DP/RP-DRL Models/contrast_enc_30.pt"
-DQN_ORACLE_PATH = "/home/rajesh/RL DP/RP-DRL Models/dqn_oracle.pkl"
-target_bottom_path  = "/home/rajesh/RL DP/Targets/contrastive_targets/targ_bottom.pkl"
-target_mid_path = "/home/rajesh/RL DP/Targets/contrastive_targets/targ_mid.pkl"
+contrast_sd_path = "/home/lowell/reward-poisoned-drl/runs/contrast_enc_4_20/contrast_enc_50.pt"
+dqn_oracle_sd_path = "/home/lowell/reward-poisoned-drl/runs/20210414/000909/dqn_store/run_0/params.pkl"
+
+target_bottom_path  = "/home/lowell/reward-poisoned-drl/data/targets/targ_bottom.pkl"
+target_mid_path = "/home/lowell/reward-poisoned-drl/data/targets/targ_mid.pkl"
+assert PONG_ACT_MAP[3] == "DOWN"  # target action is DOWN for our pong attacks
+assert PONG_ACT_MAP[5] == "DOWN"  # using 3 & 5, both meaning DOWN, to simulate "stealth"
+TARGET_META = (  # format (path, target-state-thresh, target-action)
+    (target_bottom_path, 10.2, 3),
+    (target_mid_path, 9.0, 5)
+)
 
 
 def build_and_train(run_ID=0, cuda_idx=None, n_parallel=2, serial_sampling=False):
@@ -58,25 +67,25 @@ def build_and_train(run_ID=0, cuda_idx=None, n_parallel=2, serial_sampling=False
         max_decorrelation_steps=0
     )
 
-    delta_bound = 0.5
-    gamma = 0.99 # Discount factor
-    state_dict_contrastive = torch.load(STATE_DICT_PATH, map_location=torch.device(device)) # Contrastive encoder state dict
-    keys = []
-    temp_file = open(target_bottom_path, "rb") # Pickle files correspondong to target states
-    keys.append(pickle.load(temp_file))
-    temp_file = open(target_mid_path, "rb")
-    keys.append(pickle.load(temp_file)) # list of target states
-    runner_state_dict = torch.load(DQN_ORACLE_PATH, map_location=torch.device(device))
-    dqn_state_dict = runner_state_dict["agent_state_dict"]["model"] # Oracle DQN state dict loaded
+    # load target observations along with respective thresholds and target actions
+    target_obs = []
+    target_info = {}
+    for idx, (tpath, tthresh, ttarg) in enumerate(TARGET_META):
+        with open(tpath, "rb") as f:
+            tob = pickle.load(f)
+            target_obs.append(tob)
+            target_info[idx] = (tthresh, ttarg)
+    target_obs = np.asarray(target_obs).transpose(0, 3, 1, 2)  # N, H, W, C --> N, C, H, W
 
+    # adversary algorithm (subsumes agent DQN algorithm)
     algo = FixedAttackerDQN(
-        delta_bound,
-        gamma,
-        device,
-        state_dict_contrastive,
-        keys,
-        dqn_state_dict,
-        min_steps_learn=1e3,
+        target_obs,
+        target_info,
+        contrast_sd_path,
+        dqn_oracle_sd_path,
+        delta_bound=1.0,
+        first_poison_itr=1,
+        min_steps_learn=1e3
     )
 
     agent = AtariDqnAgent()

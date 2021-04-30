@@ -115,7 +115,7 @@ class Contrastor:
         self.W.data = state_dict["bilinear.weight"].data
         self.query_enc.load_state_dict(state_dict["query_enc"])
         self.key_enc.load_state_dict(state_dict["key_enc"])
-    # @torch.no_grad()
+
     def __call__(self, queries, keys):
         """
         Returns (M, N) shape logit similarity matrix,
