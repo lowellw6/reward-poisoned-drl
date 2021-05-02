@@ -110,7 +110,7 @@ class FederatedRunner(MinibatchRlBase):
         Needs to organize steps 1-5 in Class comment.
         Should also expect some logging info coming from clients to server
         """
-        return NotImplementedError
+        raise NotImplementedError
 
     def evaluate_server_agent(self, itr):
         """
@@ -119,10 +119,10 @@ class FederatedRunner(MinibatchRlBase):
         Should evaluate server's global agent model using offline batches
         from its own server sampler.
         """
-        return NotImplementedError
+        raise NotImplementedError
 
     def get_traj_info_kwargs(self):
-        return NotImplementedError  # TODO ; delete if base is sufficient
+        raise NotImplementedError  # TODO ; delete if base is sufficient
 
     def get_n_itr(self):
         """
@@ -132,7 +132,7 @@ class FederatedRunner(MinibatchRlBase):
         return self.n_itr
 
     def initialize_logging(self):
-        return NotImplementedError  # TODO
+        raise NotImplementedError  # TODO
 
     def shutdown(self):
         """Extended to shutdown server and clients."""
@@ -143,13 +143,13 @@ class FederatedRunner(MinibatchRlBase):
             client.shutdown()
     
     def get_itr_snapshot(self, itr):
-        return NotImplementedError  # TODO ; probably only need agent state dict from server
+        raise NotImplementedError  # TODO ; probably only need agent state dict from server
 
     def store_diagnostics(self, itr, traj_infos, opt_info):
-        return NotImplementedError  # TODO ; delete if base is sufficient
+        raise NotImplementedError  # TODO ; delete if base is sufficient
 
     def log_diagnostics(self, itr, traj_infos=None, eval_time=0, prefix='Diagnostics/'):
-        return NotImplementedError  # TODO ; delete if base is sufficient
+        raise NotImplementedError  # TODO ; delete if base is sufficient
 
     def _log_infos(self, traj_infos=None):
-        return NotImplementedError  # TODO ; delete if base is sufficient
+        raise NotImplementedError  # TODO ; delete if base is sufficient
