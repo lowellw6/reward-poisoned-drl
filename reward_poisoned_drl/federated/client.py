@@ -197,10 +197,9 @@ def client_worker(asa_factory, ctrl, n_itr, affinity, seed, rank, world_size):
     for itr in range(n_itr):
         # wait for signal to start sampler-algo iteration
         with ctrl.lock_in:
-            # shutdown if specified
+            # break and shutdown if specified
             if ctrl.shutdown:
-                client_dict.sampler.shutdown()
-                return
+                break
 
             agent_state_dict = ctrl.params_conn.recv()  # blocks until params finish sending
             client_dict.agent.load_state_dict(agent_state_dict)
@@ -220,6 +219,8 @@ def client_worker(asa_factory, ctrl, n_itr, affinity, seed, rank, world_size):
         # wait to be reset by main client process
         ctrl.lock_out.acquire()
         ctrl.lock_out.release()
+
+    client_dict.sampler.shutdown()
 
 
 class ParallelFederatedClient(FederatedClientBase):
