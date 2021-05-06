@@ -1,186 +1,9 @@
 
-from abc import ABC, abstractmethod
 import multiprocessing as mp
 import ctypes
 
-from rlpyt.algos.base import RlAlgorithm
-from rlpyt.agents.base import BaseAgent
-from rlpyt.samplers.base import BaseSampler
-from rlpyt.utils.quick_args import save__init__args
-from rlpyt.utils.seed import make_seed
+from reward_poisoned_drl.federated.client.base import FederatedClientBase, AsaFactory, initialize_client
 from rlpyt.utils.collections import AttrDict
-
-
-class AsaFactory:
-    """
-    ~Agent-Sampler-Algorithm factory~
-    To be built in experiment launch file.
-    Should construct the algorithm, agent, and sampler
-    needed for a client. This packaging allows convenient
-    passing to subprocesses for creation, where the objects
-    themselves may not be pickleable.
-    """
-    def __init__(self) -> tuple[BaseAgent, BaseSampler, RlAlgorithm]:
-        raise NotImplementedError
-
-
-def initialize_client(client, n_itr, affinity, seed, rank, world_size):
-    client.n_itr = n_itr
-    client.affinity = affinity
-    client.seed = seed if seed is not None else make_seed()  # assumes global seed set in FederatedRunner
-    client.rank = rank
-    client.world_size = world_size
-
-    examples = client.sampler.initialize(
-        agent=client.agent,  # Agent gets initialized in sampler.
-        affinity=client.affinity,
-        seed=client.seed + 1,
-        bootstrap_value=getattr(client.algo, "bootstrap_value", False),
-        traj_info_kwargs=client.get_traj_info_kwargs(),
-        rank=rank,
-        world_size=world_size
-    )
-
-    client.itr_batch_size = client.sampler.batch_spec.size * world_size
-    client.agent.to_device(client.affinity.get("cuda_idx", None))
-    if world_size > 1:
-        client.agent.data_parallel()
-
-    client.algo.initialize(
-        agent=client.agent,
-        n_itr=n_itr,
-        batch_spec=client.sampler.batch_spec,
-        mid_batch_reset=client.sampler.mid_batch_reset,
-        examples=examples,
-        world_size=world_size,
-        rank=rank
-    ) # TODO check algo supports pass_gradients function via Mixin inheritance
-
-
-class FederatedClientBase(ABC):
-    """
-    Abstract base class for federated clients.
-    Requires a factory for generating the sampler, 
-    agent, and algorithm which are expected to be 
-    used in a federated setting: the client syncs 
-    with the global server model, starts a 
-    sampler-algorithm step (may occur in seperate 
-    process), and passes the computed gradients 
-    back to the global server when finished.
-    """
-    @abstractmethod
-    def __init__(self, asa_factory: AsaFactory):
-        """
-        Initialize step_in_progress flag
-        which keeps track of when it's valid
-        to call 'join'. All subclasses should 
-        also set self.batch_spec here.
-        """
-        self.step_in_progress = False
-    
-    @abstractmethod
-    def initialize(self, n_itr, affinity, seed=None, rank=0, world_size=1):
-        pass
-
-    @abstractmethod
-    def step(self, itr, agent_state_dict):
-        """
-        Starts one client sampler-algorithm
-        iteration. First updates agent
-        model with agent_state_dict.
-
-        Non-abstract overwrites should call this
-        to update 'step_in_progress'.
-        """
-        if self.step_in_progress:
-            raise RuntimeError("Cannot start new client step when already stepping")
-        
-        self.step_in_progress = True
-
-    @abstractmethod
-    def join(self):
-        """
-        Returns gradients generated from the 
-        most recent step. This may block if
-        the step did not occur in the main
-        process.
-
-        Also responsible for passing
-        traj_infos and opt_info for logging.
-
-        Non-abstract overwrites should call this
-        to update 'step_in_progress'.
-        """
-        if not self.step_in_progress:
-            raise RuntimeError("Cannot provide gradients with 'join' until after calling 'step'")
-
-        self.step_in_progress = False
-
-    @abstractmethod
-    def shutdown(self):
-        pass
-
-    @abstractmethod
-    def get_traj_info_kwargs(self):
-        pass
-
-    @property
-    def batch_size(self):
-        return self.batch_spec.size
-
-
-class SerialFederatedClient(FederatedClientBase):
-    """
-    Federated client where, excluding any sampler
-    parallelism, all compute happens in the main
-    process. 
-    
-    Helpful for debugging, and may be fast enough 
-    for experiments with relativey few clients
-    sampled at each global model update.
-    """
-    def __init__(self, asa_factory: AsaFactory):
-        """
-        Construct sampler, agent, and algorithm, 
-        and extract batch_spec from sampler.
-        """
-        super().__init__(asa_factory)  # initialize step_in_progress flag
-        self.agent, self.sampler, self.algo = asa_factory()
-        self.batch_spec = self.sampler.batch_spec
-        self.grad = None
-        self.traj_infos = None
-        self.opt_info = None
-
-    def initialize(self, n_itr, affinity, seed=None, rank=0, world_size=1):
-        """Simply initialize algorithm, agent, and sampler in main process."""
-        initialize_client(self, n_itr, affinity, seed, rank, world_size)        
-
-    def step(self, itr, agent_state_dict):
-        """
-        First syncs agent model with input.
-        Then takes one sampler-algorithm step,
-        and extracts gradients using the algorithm.
-        """
-        super().step(itr)
-        self.agent.load_state_dict(agent_state_dict)
-
-        self.agent.sample_mode(itr)
-        samples, self.traj_infos = self.sampler.obtain_samples(itr)
-        self.agent.train_mode(itr)
-        self.opt_info = self.algo.optimize_agent(itr, samples)
-
-        self.grad = self.algo.pass_gradients()
-
-    def join(self):
-        """Return gradients and stats from last step."""
-        super().join()
-        return self.grad, self.traj_infos, self.opt_info
-
-    def shutdown(self):
-        self.sampler.shutdown()
-
-    def get_traj_info_kwargs(self):
-        return dict(discount=getattr(self.algo, "discount", 1))
 
 
 def client_worker(asa_factory, ctrl, n_itr, affinity, seed, rank, world_size):
@@ -258,7 +81,7 @@ class ParallelFederatedClient(FederatedClientBase):
         computes sampler interaction and optimization
         details.
         """
-        super().step(itr)
+        super().step(itr, agent_state_dict)
         self.main_ctrl.params_conn.send(agent_state_dict)
 
         self._signal_worker_start()
@@ -334,7 +157,7 @@ class ParallelFederatedClient(FederatedClientBase):
         return dict(
             asa_factory=self.asa_factory,
             ctrl=self.worker_ctrl,  # pass worker controller; shared locks, different pipe connections
-            n_itr=n_itr
+            n_itr=n_itr,
             affinity=affinity,
             seed=seed,
             rank=rank,
