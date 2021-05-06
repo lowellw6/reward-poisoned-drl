@@ -6,7 +6,7 @@ from reward_poisoned_drl.federated.client.base import FederatedClientBase, AsaFa
 from rlpyt.utils.collections import AttrDict
 
 
-def client_worker(asa_factory, ctrl, n_itr, affinity, seed, rank, world_size):
+def client_worker(asa_factory, ctrl, n_itr, affinity, traj_info_kwargs, seed, rank, world_size):
     """
     Routine for parallel client worker.
     Stores all needed client members on a proxy attribute dictionary.
@@ -15,23 +15,27 @@ def client_worker(asa_factory, ctrl, n_itr, affinity, seed, rank, world_size):
     """
     agent, sampler, algo = asa_factory()
     client_dict = AttrDict(agent=agent, sampler=sampler, algo=algo)
+    client_dict.get_traj_info_kwargs = lambda: traj_info_kwargs  # pass as getter func
+    
     initialize_client(client_dict, n_itr, affinity, seed, rank, world_size)
 
     for itr in range(n_itr):
+        print("-1")
         # wait for signal to start sampler-algo iteration
         with ctrl.lock_in:
+            print("0")
             # break and shutdown if specified
             if ctrl.shutdown:
                 break
-
+            print("1")
             agent_state_dict = ctrl.params_conn.recv()  # blocks until params finish sending
             client_dict.agent.load_state_dict(agent_state_dict)
-
+            print("2")
             client_dict.agent.sample_mode(itr)
             samples, traj_infos = client_dict.sampler.obtain_samples(itr)
             client_dict.agent.train_mode(itr)
             opt_info = client_dict.algo.optimize_agent(itr, samples)
-
+            print("3")
             grad = client_dict.algo.pass_gradients()
 
             # ship gradients and logging infos to main process
@@ -159,6 +163,7 @@ class ParallelFederatedClient(FederatedClientBase):
             ctrl=self.worker_ctrl,  # pass worker controller; shared locks, different pipe connections
             n_itr=n_itr,
             affinity=affinity,
+            traj_info_kwargs=self.get_traj_info_kwargs(),
             seed=seed,
             rank=rank,
             world_size=world_size

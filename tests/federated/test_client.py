@@ -1,6 +1,8 @@
 
 import unittest
 
+from rlpyt.envs.atari.atari_env import AtariEnv
+
 from reward_poisoned_drl.federated.client.serial import SerialFederatedClient
 from reward_poisoned_drl.federated.client.parallel import ParallelFederatedClient
 
@@ -19,31 +21,47 @@ def run_client(client, n_itr, affinity, agent_state_dict=None):
     client.shutdown()
 
 
-class TestSerialClient(unittest.TestCase):
+def get_dummy_state_dict():
+    """
+    For testing parallel client, which initializes its
+    agent inside the worker process.
+    """
+    asa_factory = TestAsaFactoryClean()
+    agent, _, _ = asa_factory()
+    env = AtariEnv()
+    agent.initialize(env.spaces)
 
-    def test_clean_client(self):
-        client = SerialFederatedClient(TestAsaFactoryClean())
-        n_itr = 126
-        affinity = dict(cuda_idx=None, workers_cpus=list(range(2)))
-
-        run_client(client, n_itr, affinity)
-
-    def test_malicious_client(self):
-        client = SerialFederatedClient(TestAsaFactoryMalicious())
-        n_itr = 126
-        affinity = dict(cuda_idx=None, workers_cpus=list(range(2)))
-
-        run_client(client, n_itr, affinity)
+    return agent.state_dict()["model"]
 
 
-# class TestParallelClient(unittest.TestCase):
+# class TestSerialClient(unittest.TestCase):
 
 #     def test_clean_client(self):
-#         client = ParallelFederatedClient(TestAsaFactoryClean())
-#         n_itr = 3
+#         client = SerialFederatedClient(TestAsaFactoryClean())
+#         n_itr = 126
 #         affinity = dict(cuda_idx=None, workers_cpus=list(range(2)))
 
 #         run_client(client, n_itr, affinity)
+
+#     def test_malicious_client(self):
+#         client = SerialFederatedClient(TestAsaFactoryMalicious())
+#         n_itr = 126
+#         affinity = dict(cuda_idx=None, workers_cpus=list(range(2)))
+
+#         run_client(client, n_itr, affinity)
+
+
+class TestParallelClient(unittest.TestCase):
+
+    def test_clean_client(self):
+        asa_factory = TestAsaFactoryClean()
+        client = ParallelFederatedClient(asa_factory)
+        n_itr = 3
+        affinity = dict(cuda_idx=None, workers_cpus=list(range(2)))
+
+        agent_state_dict = get_dummy_state_dict()
+
+        run_client(client, n_itr, affinity, agent_state_dict)
 
 #     def test_clean_client(self):
 #         client = ParallelFederatedClient(TestAsaFactoryMalicious())
