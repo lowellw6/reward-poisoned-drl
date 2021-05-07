@@ -29,6 +29,8 @@ from rlpyt.models.dqn.atari_dqn_model import AtariDqnModel
 from reward_poisoned_drl.contrastive_encoder.contrast import Contrastor
 from reward_poisoned_drl.utils import semantic_crop_pong, PONG_ACT_MAP
 
+CombinedInfo = None  # dynamic optimizer info namedtuple class, set global for pickle
+
 
 class FixedAttackerMixin:
 
@@ -67,8 +69,9 @@ class FixedAttackerMixin:
         self.upcoming_log = False
         self.target_recall = [deque(maxlen=target_recall_window) for _ in range(self.num_targets)]
         self.AdvsOptInfo = namedtuple("AdvsOptInfo", [f"recallTarget{i}" for i in range(self.num_targets)])
-        self.CombinedInfo = namedtuple("CombinedInfo", OptInfo._fields + self.AdvsOptInfo._fields)
-        self.opt_info_fields = tuple(f for f in self.CombinedInfo._fields)
+        global CombinedInfo
+        CombinedInfo = namedtuple("CombinedInfo", OptInfo._fields + self.AdvsOptInfo._fields)
+        self.opt_info_fields = tuple(f for f in CombinedInfo._fields)
 
     def initialize(self, agent, n_itr, batch_spec, mid_batch_reset, examples, world_size=1, rank=0):
         super().initialize(agent, n_itr, batch_spec, mid_batch_reset, examples, world_size=world_size, rank=rank)
@@ -304,7 +307,7 @@ class FixedAttackerMixin:
         self._update_target_recall(samples)
 
         attacker_opt_info = self.AdvsOptInfo(*self._get_target_recall())
-        return self.CombinedInfo(*(agent_opt_info + attacker_opt_info))
+        return CombinedInfo(*(agent_opt_info + attacker_opt_info))
 
 
 class FixedAttackerDQN(FixedAttackerMixin, DQN):
@@ -314,8 +317,9 @@ class FixedAttackerDQN(FixedAttackerMixin, DQN):
         super().__init__(*args, **kwargs)
         """Overwrite AdvsOptInfo to add attackerCost."""
         self.AdvsOptInfo = namedtuple("AdvsOptInfo", ["attackerCost"] + [f"recallTarget{i}" for i in range(self.num_targets)])
-        self.CombinedInfo = namedtuple("CombinedInfo", OptInfo._fields + self.AdvsOptInfo._fields)
-        self.opt_info_fields = tuple(f for f in self.CombinedInfo._fields)
+        global CombinedInfo
+        CombinedInfo = namedtuple("CombinedInfo", OptInfo._fields + self.AdvsOptInfo._fields)
+        self.opt_info_fields = tuple(f for f in CombinedInfo._fields)
 
         # for storing dummy tensors which DQN does not use but its API requires
         self.prev_action_dummy = None
@@ -351,4 +355,4 @@ class FixedAttackerDQN(FixedAttackerMixin, DQN):
         attacker_cost = self._get_attacker_cost()
 
         attacker_opt_info = self.AdvsOptInfo(*([attacker_cost] + self._get_target_recall()))
-        return self.CombinedInfo(*(agent_opt_info + attacker_opt_info))
+        return CombinedInfo(*(agent_opt_info + attacker_opt_info))
