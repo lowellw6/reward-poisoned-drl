@@ -110,7 +110,35 @@ class FederatedRunner(MinibatchRlBase):
         Needs to organize steps 1-5 in Class comment.
         Should also expect some logging info coming from clients to server
         """
-        raise NotImplementedError
+        # raise NotImplementedError
+        # Choose random subset of clients (Assuming each agent is equally likely ot be picked)
+        self.n_iterations_global = 40
+        fraction_picked_clients = 0.1
+        self.learning_rate = 0.001
+        for itr in self.n_iterations_global:
+            num_clients_tobe_picked = int(self.num_clients*fraction_picked_clients)
+            picked_clients = np.random.choice(self.num_clients, num_clients_tobe_picked)
+            grads = None
+            for i in picked_clients:
+                self.clients[i].step(self.n_itr, self.server.agent.state_dict())
+                if grads==None:
+                    grads,_,_ = self.clients[i].join()
+                else:
+                    temp,_,_ = self.clients[i].join()
+                    for j in range(0, len(grads)):
+                        grads[j]+=temp[j]
+            grads = grads/(num_clients_tobe_picked*1.)
+            server_model = self.server.agent.state_dict()["model"]
+            j = 0
+            for params in server_model.parameters():
+                params+=-1*grads[j]*self.learning_rate
+            self.server.agent.model.load_state_dict(server_model)
+            self.server.agent.target_model.load_state_dict(server_model)
+
+        ### Parallel runner
+
+
+
 
     def evaluate_server_agent(self, itr):
         """
