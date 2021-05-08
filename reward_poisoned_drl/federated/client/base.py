@@ -31,6 +31,11 @@ class ClientAlgoMixin:
         super().__init__(*args, **kwargs)
         self.last_grads = None
 
+    def initialize(self, *args, **kwargs):
+        """Fix updates_per_optimize as 1.""" 
+        super().initialize(*args, **kwargs)
+        self.updates_per_optimize = 1
+
     def save_and_step(self):
         """Snapshot gradients before taking pytorch optimizer step."""
         self.last_grads = [param.grad for param in self.agent.model.parameters()]
