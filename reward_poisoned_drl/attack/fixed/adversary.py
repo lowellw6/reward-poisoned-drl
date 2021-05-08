@@ -123,7 +123,7 @@ class FixedAttackerMixin:
         last sampler time step, which is fine since 
         we're just adding it to a replay buffer.
         """
-        if self.opt_itr < self.first_poison_itr:
+        if self.last_samples is None or self.opt_itr < self.first_poison_itr:
             self.last_samples = copy.deepcopy(samples)
             return super().samples_to_buffer(samples)
 

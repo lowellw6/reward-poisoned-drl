@@ -63,7 +63,6 @@ class ParallelFederatedClient(FederatedClientBase):
     """
     def __init__(self, asa_factory: AsaFactory):
         super().__init__(asa_factory)  # initialize step_in_progress flag
-        self.asa_factory = asa_factory
         self.main_ctrl, self.worker_ctrl = self._build_parallel_controllers()
         
         # create temporary sampler and algo to extract batch spec and traj_info_kwargs

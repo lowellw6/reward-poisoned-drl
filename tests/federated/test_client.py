@@ -7,8 +7,7 @@ from rlpyt.envs.atari.atari_env import AtariEnv
 
 from reward_poisoned_drl.federated.client.serial import SerialFederatedClient
 from reward_poisoned_drl.federated.client.parallel import ParallelFederatedClient
-
-from asa_factories import TestAsaFactoryClean, TestAsaFactoryMalicious
+from reward_poisoned_drl.federated.client.asa_factories import AsaFactoryClean, AsaFactoryMalicious
 
 
 def run_client(client, n_itr, affinity, agent_state_dict=None):
@@ -51,7 +50,7 @@ def get_dummy_state_dict():
     For testing parallel client, which initializes its
     agent inside the worker process.
     """
-    asa_factory = TestAsaFactoryClean()
+    asa_factory = AsaFactoryClean()
     agent, _, _ = asa_factory()
     env = AtariEnv()
     agent.initialize(env.spaces)
@@ -62,14 +61,14 @@ def get_dummy_state_dict():
 class TestSerialClient(unittest.TestCase):
 
     def test_clean_client(self):
-        client = SerialFederatedClient(TestAsaFactoryClean())
+        client = SerialFederatedClient(AsaFactoryClean())
         n_itr = 126
         affinity = dict(cuda_idx=None, workers_cpus=list(range(2)))
 
         run_client(client, n_itr, affinity)
 
     def test_malicious_client(self):
-        client = SerialFederatedClient(TestAsaFactoryMalicious())
+        client = SerialFederatedClient(AsaFactoryMalicious())
         n_itr = 126
         affinity = dict(cuda_idx=None, workers_cpus=list(range(2)))
 
@@ -79,7 +78,7 @@ class TestSerialClient(unittest.TestCase):
 class TestParallelClient(unittest.TestCase):
 
     def test_clean_client(self):
-        asa_factory = TestAsaFactoryClean()
+        asa_factory = AsaFactoryClean()
         client = ParallelFederatedClient(asa_factory)
         n_itr = 126
         affinity = dict(cuda_idx=0, workers_cpus=list(range(2)))
@@ -89,7 +88,7 @@ class TestParallelClient(unittest.TestCase):
         run_client(client, n_itr, affinity, agent_state_dict)
 
     def test_malicious_client(self):
-        asa_factory = TestAsaFactoryMalicious()
+        asa_factory = AsaFactoryMalicious()
         client = ParallelFederatedClient(asa_factory)
         n_itr = 126
         affinity = dict(cuda_idx=None, workers_cpus=list(range(2)))
@@ -103,7 +102,7 @@ class TestParallelSpeedup(unittest.TestCase):
 
     def test_speedup_clean(self):
         num_clients = 10
-        asa_factory = TestAsaFactoryClean()
+        asa_factory = AsaFactoryClean()
         serial_clients = [SerialFederatedClient(asa_factory) for _ in range(num_clients)]
         parallel_clients = [ParallelFederatedClient(asa_factory) for _ in range(num_clients)]
         n_itr = 250

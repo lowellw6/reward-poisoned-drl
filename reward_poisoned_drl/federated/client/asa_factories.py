@@ -19,17 +19,20 @@ class ClientFixedAttackerDQN(ClientAlgoMixin, FixedAttackerDQN):
     pass
 
 
-def get_agent_and_sampler():
+def get_agent_and_sampler(Sampler=SerialSampler, need_eval=False):
     game = "pong"
 
-    sampler = SerialSampler(
+    sampler = Sampler(
         EnvCls=AtariEnv,
         TrajInfoCls=AtariTrajInfo,  # default traj info + GameScore
         env_kwargs=dict(game=game),
         eval_env_kwargs=dict(game=game),
         batch_T=1,
         batch_B=8,  # number of game running in parallel
-        max_decorrelation_steps=0
+        max_decorrelation_steps=0,
+        eval_n_envs=int(need_eval) * 8,
+        eval_max_steps=int(51e3),
+        eval_max_trajectories=50
     )
 
     agent = AtariDqnAgent()
@@ -37,14 +40,20 @@ def get_agent_and_sampler():
     return agent, sampler
 
 
-class TestAsaFactoryClean(AsaFactory):
+class AsaFactoryClean(AsaFactory):
+    def __init__(self, Sampler=SerialSampler):
+        self.Sampler = Sampler
+
     def __call__(self):
         algo = ClientDQN(min_steps_learn=1e3)
-        agent, sampler = get_agent_and_sampler()
+        agent, sampler = get_agent_and_sampler(Sampler=self.Sampler)
         return agent, sampler, algo
 
 
-class TestAsaFactoryMalicious(AsaFactory):
+class AsaFactoryMalicious(AsaFactory):
+    def __init__(self, Sampler=SerialSampler):
+        self.Sampler = Sampler
+
     def __call__(self):
         contrast_sd_path = "/home/lowell/reward-poisoned-drl/runs/contrast_enc_4_20/contrast_enc_50.pt"
         dqn_oracle_sd_path = "/home/lowell/reward-poisoned-drl/runs/20210414/000909/dqn_store/run_0/params.pkl"
@@ -80,6 +89,6 @@ class TestAsaFactoryMalicious(AsaFactory):
             min_steps_learn=1e3
         )
 
-        agent, sampler = get_agent_and_sampler()
+        agent, sampler = get_agent_and_sampler(Sampler=self.Sampler)
 
         return agent, sampler, algo

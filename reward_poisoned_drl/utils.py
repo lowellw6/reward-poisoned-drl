@@ -35,6 +35,24 @@ def soft_update_params(net, target_net, tau):
         )
 
 
+def list_to_norm(tensor_list):
+    """
+    Returns L2 norm of flattened, 
+    concatenated data viewed as vector.
+    """
+    cum_sum = 0.
+    for t in tensor_list:
+        cum_sum += torch.sum(t ** 2)
+    return torch.sqrt(cum_sum)
+
+
+def flatten_lists(list_of_lists):
+    flattened = []
+    for l in list_of_lists:
+        flattened += l
+    return flattened
+
+
 def random_crop(imgs, output_size):
     """
     Vectorized way to do random crop using sliding windows

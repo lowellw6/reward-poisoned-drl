@@ -113,6 +113,7 @@ class FederatedClientBase(ABC):
         also set self.batch_spec here.
         """
         self.step_in_progress = False
+        self.asa_factory = asa_factory
     
     @abstractmethod
     def initialize(self, n_itr, affinity, seed=None, rank=0, world_size=1):
