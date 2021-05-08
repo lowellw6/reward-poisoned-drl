@@ -28,7 +28,7 @@ def get_agent_and_sampler(Sampler=SerialSampler, need_eval=False):
         env_kwargs=dict(game=game),
         eval_env_kwargs=dict(game=game),
         batch_T=1,
-        batch_B=8,  # number of game running in parallel
+        batch_B=2,  # number of game running in parallel
         max_decorrelation_steps=0,
         eval_n_envs=int(need_eval) * 8,
         eval_max_steps=int(51e3),
@@ -83,8 +83,8 @@ class AsaFactoryMalicious(AsaFactory):
             target_info,
             contrast_sd_path,
             dqn_oracle_sd_path,
-            delta_bound=1.0,
-            min_steps_poison=0,
+            delta_bound=2.0,
+            min_steps_poison=1e6,  # poison after convergence
             target_recall_window=1000,
             min_steps_learn=1e3
         )

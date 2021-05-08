@@ -54,3 +54,21 @@ class SerialFederatedClient(FederatedClientBase):
 
     def get_traj_info_kwargs(self):
         return dict(discount=getattr(self.algo, "discount", 1))
+
+
+class SerialFederatedClientLogNotify(SerialFederatedClient):
+    """
+    Notifies algo when runner is logging.
+    Should be used with corresponding runner, server, and algo classes.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.upcoming_log = False
+
+    def log_notify(self, flag: bool):
+        self.upcoming_log = flag
+
+    def step(self, itr, agent_state_dict):
+        if getattr(self.algo, "log_notify", None) is not None:
+            self.algo.log_notify(self.upcoming_log)
+        super().step(itr, agent_state_dict)

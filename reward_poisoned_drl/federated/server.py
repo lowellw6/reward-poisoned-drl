@@ -10,7 +10,7 @@ from rlpyt.utils.quick_args import save__init__args
 from reward_poisoned_drl.utils import list_to_norm, flatten_lists
 
 ServerOptInfo = namedtuple("ServerOptInfo", ["numValidGrads", "meanGradNorm"])
-AggClientOptInfo = None  # created dynamically, set global for pickle
+AggClientOptInfo = namedtuple("AggClientOptInfo", ["attackerCost", "recallTarget0", "recallTarget1"]) # TODO make not hard-coded and non-singular (needs to be dynamic)
 
 
 class FederatedServer:
@@ -54,9 +54,6 @@ class FederatedServer:
         self.client_opt_infos = []
 
         self.opt_info_fields = tuple(f for f in ServerOptInfo._fields)
-
-        global AggClientOptInfo
-        AggClientOptInfo = namedtuple("AggClientOptInfo", []) # TODO make not empty
 
     def initialize(self, clients, n_itr, affinity, seed=None, rank=0, world_size=1):
         if len(clients) < self.clients_per_itr:
@@ -223,6 +220,52 @@ class FederatedServer:
     def _combine_client_opt_infos(self, client_opt_infos):
         """
         Converts list of client opt infos to single opt info
-        with each key labelled by 
+        with each key labelled by TODO
         """
-        return AggClientOptInfo()  # TODO make not empty
+        # TODO make not save using hard-coded keys
+        # right now this extracts attacker stats from any clients which provide them
+        # we can aggregate these since they're generated using the same loaded global model
+        # WARNING: recall will be empty even when logging if no malicious clients were sampled that itr...
+        attacker_cost_buff = []
+        recall_target0_buff = []
+        recall_target1_buff = []
+        for opt_info in client_opt_infos:
+            if getattr(opt_info, "attackerCost", None) is not None:
+                attacker_cost_buff += [opt_info.attackerCost]
+            if getattr(opt_info, "recallTarget0", None) is not None:
+                recall_target0_buff += opt_info.recallTarget0
+            if getattr(opt_info, "recallTarget1", None) is not None:
+                recall_target1_buff += opt_info.recallTarget1
+        return AggClientOptInfo(attacker_cost_buff, recall_target0_buff, recall_target1_buff)
+
+
+class FederatedServerLogNotify(FederatedServer):
+    """
+    Notifies client when runner is logging.
+    Should be used with corresponding runner and client classes.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.upcoming_log = False
+
+    def log_notify(self, flag: bool):
+        self.upcoming_log = flag
+
+    def obtain_gradients(self, itr):
+        global_model = self._get_global_model()
+        client_idxs = np.random.choice(self.num_clients, size=self.clients_per_itr, replace=False)
+        
+        # first step all models, allowing parallel execution if using parallelized clients
+        for idx in client_idxs:
+            self.clients[idx].log_notify(self.upcoming_log)  # log notify injected before step
+            self.clients[idx].step(itr, global_model)
+        
+        # gather gradients from client stepping; will block until finished if parallelized
+        for idx in client_idxs:
+            grad, traj_infos, opt_info = self.clients[idx].join()
+            self._append_client_results(grad, traj_infos, opt_info)
+
+        # return client results along with client_idxs
+        gradients, client_traj_infos, client_opt_infos = self._get_aggregated_results()
+        return gradients, client_idxs, client_traj_infos, client_opt_infos
+    

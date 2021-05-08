@@ -2,12 +2,17 @@
 import psutil
 import torch
 import time
+from collections import namedtuple
 
 from rlpyt.runners.minibatch_rl import MinibatchRlEval
 from rlpyt.utils.quick_args import save__init__args
 from rlpyt.utils.seed import set_seed, make_seed
 from rlpyt.utils.logging import logger
 from rlpyt.utils.prog_bar import ProgBarCounter
+
+from reward_poisoned_drl.federated.server import ServerOptInfo, AggClientOptInfo
+
+CompleteOptInfo = namedtuple("CompleteOptInfo", ServerOptInfo._fields + AggClientOptInfo._fields)
 
 
 class FederatedRunner(MinibatchRlEval):
@@ -159,9 +164,9 @@ class FederatedRunner(MinibatchRlEval):
     def initialize_logging(self):
         """
         Override to fix self._opt_infos store (no self.algo).
-        TODO this will need to change when extending beyond just server opt info
+        TODO this will need to change when extending beyond hard-coded client opt infos
         """
-        self._opt_infos = {k: list() for k in self.server.opt_info_fields}
+        self._opt_infos = {k: list() for k in CompleteOptInfo._fields}
         self._start_time = self._last_time = time.time()
         self._cum_time = 0.
         self._cum_eval_time = 0.
@@ -190,9 +195,10 @@ class FederatedRunner(MinibatchRlEval):
         )
 
     def store_diagnostics(self, itr, client_traj_infos, client_opt_infos, server_opt_info):
-        # TODO replace empty list with client_traj_infos after differentiating from server_traj_infos
-        # client_opt_infos is currently empty, so nothing would be logged anyway from there
-        super().store_diagnostics(itr, [], server_opt_info)
+        # TODO make any necessary changes when removing client_opt_infos hard-coding
+        # TODO remove empty list replacement for passing client_traj_infos
+        complete_opt_info = CompleteOptInfo(*(list(server_opt_info) + list(client_opt_infos)))
+        super().store_diagnostics(itr, [], complete_opt_info)
 
     def log_diagnostics(self, itr, traj_infos=None, eval_time=0, prefix='Diagnostics/'):
         """
@@ -231,3 +237,31 @@ class FederatedRunner(MinibatchRlEval):
 
     # def _log_infos(self, traj_infos=None):
     #     raise NotImplementedError  # TODO ; delete if base is sufficient
+
+
+class FederatedRunnerLogNotify(FederatedRunner):
+    """
+    Overrides train function to notify server before logging.
+    Should be used with corresponding server and client classes.
+    """
+    def train(self):
+        n_itr = self.startup()
+        
+        with logger.prefix(f"itr #0 "):
+            eval_traj_infos, eval_time = self.evaluate_server_agent(0)
+            self.log_diagnostics(0, eval_traj_infos, eval_time)
+        
+        for itr in range(n_itr):
+            logger.set_iteration(itr)
+            logging_this_itr = (itr + 1) % self.log_interval_itrs == 0
+            with logger.prefix(f"itr #{itr} "):
+                self.server.log_notify(logging_this_itr)
+                gradients, client_idxs, client_traj_infos, client_opt_infos = self.server.obtain_gradients(itr)
+                server_opt_info = self.server.optimize_agent(itr, gradients, client_idxs)
+                
+                self.store_diagnostics(itr, client_traj_infos, client_opt_infos, server_opt_info)
+                if logging_this_itr:
+                    server_traj_infos, eval_time = self.evaluate_server_agent(itr)
+                    self.log_diagnostics(itr, server_traj_infos, eval_time)
+        
+        self.shutdown()
