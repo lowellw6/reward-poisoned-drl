@@ -7,8 +7,8 @@ from reward_poisoned_drl.utils import show_frame_stacks
 
 PREFIX = "/home/lowell/reward-poisoned-drl/data/val"
 
-DATA_FILE = "25M/25M_C0.pkl"
-DUMP_FILE = "ep_stack.pkl"
+DATA_FILE = "1M/1M_C0.pkl"
+DUMP_FILE = "ep_stack1.pkl"
 
 ep = 0  # episode to extract, 0 indexed starting at first done
 b = 0  # which env idx to extract from

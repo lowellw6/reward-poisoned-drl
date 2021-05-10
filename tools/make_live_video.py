@@ -10,6 +10,7 @@ import torch
 import numpy as np
 import cv2
 import imageio
+import pickle
 import os.path as osp
 
 from rlpyt.envs.atari.atari_env import AtariEnv
@@ -43,7 +44,7 @@ MODEL_FILES = (
     MODEL_DEL_D2p0
 )
 
-VID_PREFIX = "/home/lowell/reward-poisoned-drl/data/attack_demos/delay_poison/"
+VID_PREFIX = "/home/lowell/reward-poisoned-drl/data/attack_figs/delay_poison/"
 
 Q_REFS = (  # (q_idx, norm_y_loc)
     (3, 0.85),  # targ_bottom
@@ -98,7 +99,7 @@ def build_frame(step_idx, obs, act, q, q_refs=None):
     return image
 
 
-def make_live_video(model_path, q_refs, vid_idx, cuda_idx):
+def annotate_policy_live(model_path, q_refs, cuda_idx):
     # create Pong environment
     env = AtariEnv(game="pong")
 
@@ -141,19 +142,34 @@ def make_live_video(model_path, q_refs, vid_idx, cuda_idx):
         obs = next_obs
         step_idx += 1
 
-    frame_stack = np.stack(frames, axis=0)
+    return np.stack(frames, axis=0)
+
+
+def make_live_video(model_path, q_refs, vid_idx, cuda_idx):
+    frame_stack = annotate_policy_live(model_path, q_refs, cuda_idx)
 
     # save both slow and normal speed video
     imageio.mimwrite(osp.join(VID_PREFIX, str(vid_idx) + "_slow.mp4"), frame_stack, fps=3)
     imageio.mimwrite(osp.join(VID_PREFIX, str(vid_idx) + "_norm.mp4"), frame_stack, fps=25)
 
 
+def make_live_frame_stack(model_path, q_refs, vid_idx, cuda_idx):
+    frame_stack = annotate_policy_live(model_path, q_refs, cuda_idx)
+
+    # save as pickled numpy array
+    with open(osp.join(VID_PREFIX, str(vid_idx) + ".pkl"), "wb") as f:
+        pickle.dump(frame_stack, f)
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-g', '--cuda_idx', help='gpu to use', type=int, default=None)
+    parser.add_argument('-f', '--frames_only', action='store_true', help='store as pickled numpy array rather than mp4', default=False)
     args = parser.parse_args()
 
+    video_func = make_live_video if not args.frames_only else make_live_frame_stack
+
     for vid_idx, model_file in enumerate(MODEL_FILES):
-        make_live_video(osp.join(MODEL_PREFIX, model_file), Q_REFS, vid_idx, args.cuda_idx)
+        video_func(osp.join(MODEL_PREFIX, model_file), Q_REFS, vid_idx, args.cuda_idx)
         print(f"Model {model_file} --> Video {vid_idx}")

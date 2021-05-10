@@ -11,8 +11,8 @@ FRAME_STACK = 4
 MODEL_PREFIX = "/home/lowell/reward-poisoned-drl/runs/contrast_enc_4_20"
 MODEL_FILE = "contrast_enc_50.pt"
 DATA_PREFIX = "/home/lowell/reward-poisoned-drl/data"
-TARG_OB_FILE = "targets/targ_bottom.pkl"
-CONT_OB_FILE = "ep_stack.pkl"
+TARG_OB_FILE = "targets/targ_mid.pkl"
+CONT_OB_FILE = "ep_stack1.pkl"
 
 
 def viz_contrastive_encoder(args):
@@ -31,6 +31,7 @@ def viz_contrastive_encoder(args):
         match_stack = np.stack([contrasts[t:t+FRAME_STACK, :, :] for t in top_matches], axis=0)
         side_by_side = np.concatenate((targ_stack, match_stack), axis=-1)  # cat on width
         top_scores = scores.squeeze().cpu().detach().numpy()[top_matches]
+        print(top_matches)
         show_frame_stacks_with_scores(side_by_side, top_scores, "Target vs Match")
 
     # show feed with scores side by side (targ is rolling for viz purposes only)
