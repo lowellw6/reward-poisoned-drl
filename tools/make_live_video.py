@@ -32,7 +32,7 @@ from reward_poisoned_drl.utils import PONG_ACT_MAP
 # )
 
 # models poisoned from step 10M on
-MODEL_PREFIX = "/home/lowell/reward-poisoned-drl/runs/fixed-attack-first-poison-10M"
+MODEL_PREFIX = "/home/lowell/rl/rlpyt/data/local/20210430/"
 MODEL_DEL_Dp25 = "121943/rp_fixed_attack/run_4/params.pkl"
 MODEL_DEL_Dp50 = "122002/rp_fixed_attack/run_5/params.pkl"
 MODEL_DEL_D1p0 = "122032/rp_fixed_attack/run_6/params.pkl"
