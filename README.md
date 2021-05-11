@@ -1,6 +1,7 @@
 # Reward-Poisoning Attacks of Federated Reinforcement Learning in Atari
 
-This project was developed as part of a spring 2021 semester project for the course ECE 5984 Trustworthy Machine Learning at Virginia Tech.
+This project was developed as part of a spring 2021 semester project for the course ECE 5984 Trustworthy Machine Learning at Virginia Tech. For more discussion of motivation, method, and results, see the associated [paper](https://github.com/lowellw6/reward-poisoned-drl/files/6457316/Kudupudi_Weissman_RP_Attacks_Federated_RL.pdf).
+
 
 ## Contributors
 
@@ -69,11 +70,11 @@ pip install -e .
 
 Our learned similarity metric for descerning visual target observations. 
 
-Left: A rolling feed of the reference target observation for visualization purposes. \
-Right: An episode of observations loaded from replay.
+Left video: A rolling feed of the reference target observation for visualization purposes. \
+Right video: An episode of observations loaded from replay.
 
-Blue annotation: Frame number since start of episode. \
-Green/red annotation: Perceived similarity between the currently displayed observation and the target reference. Green is positive, red is negative. A higher green value suggests similarity, and a higher red value suggests dissimilarity. 
+Bottom-left blue annotation: Frame number since start of episode. \
+Bottom-right green/red annotation: Perceived similarity between the currently displayed observation and the target reference. Green is positive, red is negative. A higher green value suggests similarity, and a higher red value suggests dissimilarity. 
 
 Each observation is a stack of the last four grayscale frames. For simplicity, we synchronize similarity scores with the newest frame.
 
@@ -98,7 +99,47 @@ https://user-images.githubusercontent.com/42881205/117768833-eebc6400-b200-11eb-
 
 https://user-images.githubusercontent.com/42881205/117768838-f0862780-b200-11eb-9019-8593762543e5.mp4
 
-
+---
 ## Poisoned Policy Demos
 
+DQN agents trained under our proposed deep targeted reward poisoning algorithm.
 
+Videos show example trajectories along with agent action and Q-value annotations, described below.
+
+Bottom-left blue annotation: Frame number since start of episode. \
+Bottom-center red annotation: Next human-understandable action the poisoned agent intends to take. \
+Right-side green/red annotations: Q-value associated with the target action associated with the target observation at that location. Green is positive, red is negative.
+
+The upper Q-value corresponds to target "Mid," indicating how beneficial the agent believes DOWN to be. \
+Th lower Q-value corresponds to target "Bottom," also indicating how beneficial the agent believes DOWN to be. \
+Note this implementation of Atari Pong's action indexing does not produce unique actions, so both target actions are DOWN while the Q-values differ from targeting distinct action indices.
+
+When the agent is semantically close to a target observation, a successful attack results in the corresponding target Q-value spiking, resulting in the agent taking that target action. The two slowed videos below demonstrate this behavior on each target observation.
+
+https://user-images.githubusercontent.com/42881205/117779109-5a57fe80-b20c-11eb-95fe-2836e8107a35.mp4
+
+https://user-images.githubusercontent.com/42881205/117779133-5fb54900-b20c-11eb-9b1a-df4fbfb590ae.mp4
+
+---
+
+Complete episode examples for DQN agents **poisoned from the beginning of training**, with attack delta-bounds 0.25, 0.5, 1.0, and 2.0 for the weakest to strongest adversary, respectively.
+
+https://user-images.githubusercontent.com/42881205/117779809-08fc3f00-b20d-11eb-8de0-ca1928f55d82.mp4
+
+https://user-images.githubusercontent.com/42881205/117779824-0d285c80-b20d-11eb-9a38-e24679cc1d52.mp4
+
+https://user-images.githubusercontent.com/42881205/117779854-11ed1080-b20d-11eb-9f11-d8d58c1c5df9.mp4
+
+https://user-images.githubusercontent.com/42881205/117779873-14e80100-b20d-11eb-8b87-7952b415de6a.mp4
+
+---
+
+Complete episode examples for DQN agents **poisoned after 10 million environment steps during training**, with attack delta-bounds 0.25, 0.5, 1.0, and 2.0 for the weakest to strongest adversary, respectively. By 10 million steps, clean DQN training reliably converges to an expert policy. So the attacker also needs to overpower any genuine Q-value knowledge learned by the agent that disrupts malicious targeting.
+
+https://user-images.githubusercontent.com/42881205/117781000-2978c900-b20e-11eb-8235-31d880f4642d.mp4
+
+https://user-images.githubusercontent.com/42881205/117781017-2da4e680-b20e-11eb-8e0e-554e856cd11d.mp4
+
+https://user-images.githubusercontent.com/42881205/117781030-30074080-b20e-11eb-8183-a885554b3306.mp4
+
+https://user-images.githubusercontent.com/42881205/117781042-32699a80-b20e-11eb-8284-78a9cdc43752.mp4
